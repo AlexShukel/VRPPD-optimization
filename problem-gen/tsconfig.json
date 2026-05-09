@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "lib": ["ESNext"],
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "moduleResolution": "node",
+        "types": ["node"]
+    },
+    "include": ["src/**/*.ts", "generate-data.ts", "generate-problems.ts"],
+    "exclude": ["node_modules", "data", "problems"]
+}
