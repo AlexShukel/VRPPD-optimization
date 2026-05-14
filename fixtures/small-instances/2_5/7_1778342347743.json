@@ -1,0 +1,94 @@
+{
+  "vehicles": [
+    {
+      "id": 9069,
+      "priceKm": 1.2331054623206876,
+      "startLocation": {
+        "hash": "u325rn",
+        "latitude": 52.63866300952512,
+        "longitude": 11.56035257754964
+      }
+    },
+    {
+      "id": 1028,
+      "priceKm": 1.574342652138729,
+      "startLocation": {
+        "hash": "u353pc",
+        "latitude": 50.80973458761091,
+        "longitude": 16.167473139454522
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 7337,
+      "pickupLocation": {
+        "hash": "u1511b",
+        "latitude": 50.802795,
+        "longitude": 4.302606
+      },
+      "deliveryLocation": {
+        "hash": "u0mvfs",
+        "latitude": 47.439663,
+        "longitude": 8.205604
+      },
+      "loadFactor": 5
+    },
+    {
+      "id": 8015,
+      "pickupLocation": {
+        "hash": "u2c0s2",
+        "latitude": 49.308084,
+        "longitude": 12.845029
+      },
+      "deliveryLocation": {
+        "hash": "u29425",
+        "latitude": 48.2269235,
+        "longitude": 12.663144
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 10718,
+      "pickupLocation": {
+        "hash": "u30cj7",
+        "latitude": 50.819903,
+        "longitude": 12.539787
+      },
+      "deliveryLocation": {
+        "hash": "u0zwud",
+        "latitude": 50.4207257,
+        "longitude": 10.7528164
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 12,
+      "pickupLocation": {
+        "hash": "u0spxz",
+        "latitude": 49.169743,
+        "longitude": 5.968539
+      },
+      "deliveryLocation": {
+        "hash": "u34duz",
+        "latitude": 51.15175,
+        "longitude": 14.984446
+      },
+      "loadFactor": 3
+    },
+    {
+      "id": 593,
+      "pickupLocation": {
+        "hash": "u0zchs",
+        "latitude": 49.419392,
+        "longitude": 11.098348
+      },
+      "deliveryLocation": {
+        "hash": "u28pu8",
+        "latitude": 49.1748886,
+        "longitude": 11.4497967
+      },
+      "loadFactor": 8
+    }
+  ]
+}

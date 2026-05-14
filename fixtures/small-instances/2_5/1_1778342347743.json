@@ -1,0 +1,94 @@
+{
+  "vehicles": [
+    {
+      "id": 7202,
+      "priceKm": 1.882135502281673,
+      "startLocation": {
+        "hash": "u28yub",
+        "latitude": 49.00310979777257,
+        "longitude": 12.517019699126267
+      }
+    },
+    {
+      "id": 7801,
+      "priceKm": 1.4720214129813693,
+      "startLocation": {
+        "hash": "u1pyt5",
+        "latitude": 51.788764734078335,
+        "longitude": 11.128298995879934
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 5747,
+      "pickupLocation": {
+        "hash": "u1q52c",
+        "latitude": 52.609453,
+        "longitude": 8.480184
+      },
+      "deliveryLocation": {
+        "hash": "u0ym17",
+        "latitude": 50.1163799,
+        "longitude": 8.8513556
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 4685,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u2885z",
+        "latitude": 47.853927,
+        "longitude": 12.127262
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 10578,
+      "pickupLocation": {
+        "hash": "u0zck4",
+        "latitude": 49.45385,
+        "longitude": 11.077324
+      },
+      "deliveryLocation": {
+        "hash": "u29jyc",
+        "latitude": 48.8332405,
+        "longitude": 12.9620934
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 9942,
+      "pickupLocation": {
+        "hash": "u1ye7u",
+        "latitude": 55.4371108,
+        "longitude": 9.3138347
+      },
+      "deliveryLocation": {
+        "hash": "u316q9",
+        "latitude": 51.0270487,
+        "longitude": 13.3023751
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 4720,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0rrdb",
+        "latitude": 47.726706,
+        "longitude": 10.316884
+      },
+      "loadFactor": 6
+    }
+  ]
+}

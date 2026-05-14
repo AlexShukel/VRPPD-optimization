@@ -1,0 +1,52 @@
+{
+  "vehicles": [
+    {
+      "id": 7253,
+      "priceKm": 2.0460378178902663,
+      "startLocation": {
+        "hash": "u314e9",
+        "latitude": 51.074060394477954,
+        "longitude": 12.810620422223511
+      }
+    },
+    {
+      "id": 1027,
+      "priceKm": 1.4230949882921702,
+      "startLocation": {
+        "hash": "u0y83f",
+        "latitude": 49.274612222498845,
+        "longitude": 9.227856003858573
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 4620,
+      "pickupLocation": {
+        "hash": "u623rm",
+        "latitude": 57.9060825,
+        "longitude": 11.9246143
+      },
+      "deliveryLocation": {
+        "hash": "u3bsec",
+        "latitude": 55.6436033,
+        "longitude": 12.123832
+      },
+      "loadFactor": 6
+    },
+    {
+      "id": 8780,
+      "pickupLocation": {
+        "hash": "u1yv4m",
+        "latitude": 55.7507,
+        "longitude": 9.593335
+      },
+      "deliveryLocation": {
+        "hash": "u155s3",
+        "latitude": 51.2508431,
+        "longitude": 4.4152516
+      },
+      "loadFactor": 8
+    }
+  ]
+}

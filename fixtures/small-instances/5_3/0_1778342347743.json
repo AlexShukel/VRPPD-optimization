@@ -1,0 +1,93 @@
+{
+  "vehicles": [
+    {
+      "id": 1689,
+      "priceKm": 2.3773373758537715,
+      "startLocation": {
+        "hash": "u29n8e",
+        "latitude": 48.975478510017766,
+        "longitude": 12.685973484768242
+      }
+    },
+    {
+      "id": 1865,
+      "priceKm": 2.962614668035234,
+      "startLocation": {
+        "hash": "u9br88",
+        "latitude": 56.16231505602037,
+        "longitude": 22.88205673463764
+      }
+    },
+    {
+      "id": 1325,
+      "priceKm": 2.0815600575943844,
+      "startLocation": {
+        "hash": "u0f2gz",
+        "latitude": 49.39069142656534,
+        "longitude": 3.3367130259822546
+      }
+    },
+    {
+      "id": 564,
+      "priceKm": 1.1222627529660034,
+      "startLocation": {
+        "hash": "u1p53b",
+        "latitude": 51.198029776375805,
+        "longitude": 9.926957129832374
+      }
+    },
+    {
+      "id": 4652,
+      "priceKm": 2.843583314740269,
+      "startLocation": {
+        "hash": "u2bksj",
+        "latitude": 50.03993376103092,
+        "longitude": 11.781939306883443
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 4010,
+      "pickupLocation": {
+        "hash": "u1q52c",
+        "latitude": 52.609453,
+        "longitude": 8.480184
+      },
+      "deliveryLocation": {
+        "hash": "u0ut26",
+        "latitude": 50.1572251,
+        "longitude": 6.3393944
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 7327,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0x57d",
+        "latitude": 48.395497,
+        "longitude": 10.00589
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 111,
+      "pickupLocation": {
+        "hash": "u0zck4",
+        "latitude": 49.45385,
+        "longitude": 11.077324
+      },
+      "deliveryLocation": {
+        "hash": "u29pbp",
+        "latitude": 49.2178192,
+        "longitude": 12.6663828
+      },
+      "loadFactor": 8
+    }
+  ]
+}

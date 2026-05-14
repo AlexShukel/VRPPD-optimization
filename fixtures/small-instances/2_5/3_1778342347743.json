@@ -1,0 +1,94 @@
+{
+  "vehicles": [
+    {
+      "id": 266,
+      "priceKm": 2.005741364978929,
+      "startLocation": {
+        "hash": "u1pv8b",
+        "latitude": 51.59623572921681,
+        "longitude": 10.942148953486626
+      }
+    },
+    {
+      "id": 7520,
+      "priceKm": 2.1881005087197134,
+      "startLocation": {
+        "hash": "u0wfcg",
+        "latitude": 48.31300115815943,
+        "longitude": 9.57589602002491
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 5567,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u22pxn",
+        "latitude": 47.761063,
+        "longitude": 11.55829
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 5310,
+      "pickupLocation": {
+        "hash": "u1q52c",
+        "latitude": 52.609453,
+        "longitude": 8.480184
+      },
+      "deliveryLocation": {
+        "hash": "u0v003",
+        "latitude": 49.2274322,
+        "longitude": 7.0455431
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 4365,
+      "pickupLocation": {
+        "hash": "u30u9s",
+        "latitude": 51.439009,
+        "longitude": 12.371469
+      },
+      "deliveryLocation": {
+        "hash": "u0z4t0",
+        "latitude": 49.6604778,
+        "longitude": 10.0716996
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 7061,
+      "pickupLocation": {
+        "hash": "u0zck4",
+        "latitude": 49.45385,
+        "longitude": 11.077324
+      },
+      "deliveryLocation": {
+        "hash": "u2945b",
+        "latitude": 48.1689873,
+        "longitude": 12.8304815
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 10989,
+      "pickupLocation": {
+        "hash": "u3zhcj",
+        "latitude": 55.706831,
+        "longitude": 21.1414911
+      },
+      "deliveryLocation": {
+        "hash": "u3k4he",
+        "latitude": 52.4040031,
+        "longitude": 17.0754108
+      },
+      "loadFactor": 6
+    }
+  ]
+}

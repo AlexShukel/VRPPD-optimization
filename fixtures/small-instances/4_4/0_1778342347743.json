@@ -1,0 +1,98 @@
+{
+  "vehicles": [
+    {
+      "id": 3722,
+      "priceKm": 1.277781827600907,
+      "startLocation": {
+        "hash": "u17gq8",
+        "latitude": 52.60760478445591,
+        "longitude": 5.560287485812123
+      }
+    },
+    {
+      "id": 7805,
+      "priceKm": 2.1878555248904146,
+      "startLocation": {
+        "hash": "u4rwjv",
+        "latitude": 58.74142948708056,
+        "longitude": 10.80203558702444
+      }
+    },
+    {
+      "id": 6424,
+      "priceKm": 2.467053962547813,
+      "startLocation": {
+        "hash": "u0qwfj",
+        "latitude": 47.62369324850859,
+        "longitude": 9.230617296141205
+      }
+    },
+    {
+      "id": 7819,
+      "priceKm": 2.3778993091630287,
+      "startLocation": {
+        "hash": "u1tgkk",
+        "latitude": 54.03618000037245,
+        "longitude": 8.279680450437137
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 657,
+      "pickupLocation": {
+        "hash": "sp3e3q",
+        "latitude": 41.38568,
+        "longitude": 2.170205
+      },
+      "deliveryLocation": {
+        "hash": "sxfkv4",
+        "latitude": 44.44316,
+        "longitude": 25.884562
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 6990,
+      "pickupLocation": {
+        "hash": "u1q52c",
+        "latitude": 52.609453,
+        "longitude": 8.480184
+      },
+      "deliveryLocation": {
+        "hash": "u1m9r4",
+        "latitude": 52.2667,
+        "longitude": 8.05
+      },
+      "loadFactor": 4
+    },
+    {
+      "id": 8688,
+      "pickupLocation": {
+        "hash": "u0zchs",
+        "latitude": 49.419392,
+        "longitude": 11.098348
+      },
+      "deliveryLocation": {
+        "hash": "u0zck4",
+        "latitude": 49.4538498,
+        "longitude": 11.0773239
+      },
+      "loadFactor": 9
+    },
+    {
+      "id": 833,
+      "pickupLocation": {
+        "hash": "u1mxsy",
+        "latitude": 53.387024,
+        "longitude": 7.952453
+      },
+      "deliveryLocation": {
+        "hash": "u1ncku",
+        "latitude": 50.868134,
+        "longitude": 9.706848
+      },
+      "loadFactor": 7
+    }
+  ]
+}

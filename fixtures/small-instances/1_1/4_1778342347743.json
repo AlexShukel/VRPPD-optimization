@@ -1,0 +1,29 @@
+{
+  "vehicles": [
+    {
+      "id": 2859,
+      "priceKm": 2.77775982426184,
+      "startLocation": {
+        "hash": "u390cm",
+        "latitude": 53.59719790282009,
+        "longitude": 12.72206986859378
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 7718,
+      "pickupLocation": {
+        "hash": "u0wqdb",
+        "latitude": 48.955734,
+        "longitude": 8.920005
+      },
+      "deliveryLocation": {
+        "hash": "u0xpsc",
+        "latitude": 49.1400416,
+        "longitude": 10.0626447
+      },
+      "loadFactor": 7
+    }
+  ]
+}

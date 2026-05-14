@@ -1,0 +1,29 @@
+{
+  "vehicles": [
+    {
+      "id": 8420,
+      "priceKm": 2.8669387320857864,
+      "startLocation": {
+        "hash": "u2bpp6",
+        "latitude": 50.463500451985965,
+        "longitude": 11.573605642506655
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 11027,
+      "pickupLocation": {
+        "hash": "u0spxz",
+        "latitude": 49.169743,
+        "longitude": 5.968539
+      },
+      "deliveryLocation": {
+        "hash": "gbpgbw",
+        "latitude": 45.6932907,
+        "longitude": -0.325195
+      },
+      "loadFactor": 3
+    }
+  ]
+}

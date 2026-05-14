@@ -1,0 +1,98 @@
+{
+  "vehicles": [
+    {
+      "id": 5235,
+      "priceKm": 1.9238290341192616,
+      "startLocation": {
+        "hash": "u1rvuw",
+        "latitude": 53.07977101780624,
+        "longitude": 11.098231526199992
+      }
+    },
+    {
+      "id": 3093,
+      "priceKm": 1.5032480088575664,
+      "startLocation": {
+        "hash": "u0vyjc",
+        "latitude": 50.28246091498011,
+        "longitude": 8.340175982468384
+      }
+    },
+    {
+      "id": 7123,
+      "priceKm": 1.5681557896373084,
+      "startLocation": {
+        "hash": "u17bpt",
+        "latitude": 52.06116340875935,
+        "longitude": 5.607213235972277
+      }
+    },
+    {
+      "id": 8942,
+      "priceKm": 2.0354558500815867,
+      "startLocation": {
+        "hash": "u2k9pf",
+        "latitude": 46.59778576741543,
+        "longitude": 17.922791663539467
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 3983,
+      "pickupLocation": {
+        "hash": "u1q52c",
+        "latitude": 52.609453,
+        "longitude": 8.480184
+      },
+      "deliveryLocation": {
+        "hash": "u30zp4",
+        "latitude": 51.870994,
+        "longitude": 12.6153479
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 5649,
+      "pickupLocation": {
+        "hash": "u1tb82",
+        "latitude": 53.527878,
+        "longitude": 8.106301
+      },
+      "deliveryLocation": {
+        "hash": "u1w0ek",
+        "latitude": 53.552227,
+        "longitude": 8.586551
+      },
+      "loadFactor": 4
+    },
+    {
+      "id": 5738,
+      "pickupLocation": {
+        "hash": "u1yv4m",
+        "latitude": 55.7507,
+        "longitude": 9.593335
+      },
+      "deliveryLocation": {
+        "hash": "u2f2yk",
+        "latitude": 49.3770104,
+        "longitude": 14.6958464
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 1032,
+      "pickupLocation": {
+        "hash": "u1m9r4",
+        "latitude": 52.2667,
+        "longitude": 8.05
+      },
+      "deliveryLocation": {
+        "hash": "u1jrm9",
+        "latitude": 51.9081883,
+        "longitude": 7.6329215
+      },
+      "loadFactor": 8
+    }
+  ]
+}

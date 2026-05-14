@@ -1,0 +1,93 @@
+{
+  "vehicles": [
+    {
+      "id": 8384,
+      "priceKm": 2.788236666198952,
+      "startLocation": {
+        "hash": "u0wuqq",
+        "latitude": 48.594557949821734,
+        "longitude": 9.768253011892133
+      }
+    },
+    {
+      "id": 9555,
+      "priceKm": 2.777272379155883,
+      "startLocation": {
+        "hash": "u28rut",
+        "latitude": 49.20760644158796,
+        "longitude": 11.801374395444704
+      }
+    },
+    {
+      "id": 782,
+      "priceKm": 1.3459971061171103,
+      "startLocation": {
+        "hash": "u1q3bq",
+        "latitude": 52.375783273518635,
+        "longitude": 8.80470432725292
+      }
+    },
+    {
+      "id": 3373,
+      "priceKm": 1.022322196706349,
+      "startLocation": {
+        "hash": "u1mymq",
+        "latitude": 53.16775565349187,
+        "longitude": 8.318316232870457
+      }
+    },
+    {
+      "id": 2632,
+      "priceKm": 1.4581313178791002,
+      "startLocation": {
+        "hash": "u1jmkb",
+        "latitude": 51.55083333621566,
+        "longitude": 7.592280659899513
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 8727,
+      "pickupLocation": {
+        "hash": "u1xd7n",
+        "latitude": 53.866444,
+        "longitude": 10.684738
+      },
+      "deliveryLocation": {
+        "hash": "u1mpeg",
+        "latitude": 53.366959,
+        "longitude": 7.20595
+      },
+      "loadFactor": 5
+    },
+    {
+      "id": 7390,
+      "pickupLocation": {
+        "hash": "u1r2em",
+        "latitude": 52.148021,
+        "longitude": 10.348964
+      },
+      "deliveryLocation": {
+        "hash": "u1t8gb",
+        "latitude": 53.573643,
+        "longitude": 7.90207
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 6883,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0xdpc",
+        "latitude": 48.170339,
+        "longitude": 10.895949
+      },
+      "loadFactor": 7
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "vehicles": [
+    {
+      "id": 553,
+      "priceKm": 2.688223533986854,
+      "startLocation": {
+        "hash": "u2952c",
+        "latitude": 48.39458293291854,
+        "longitude": 12.699899903126903
+      }
+    },
+    {
+      "id": 8994,
+      "priceKm": 2.225392692080749,
+      "startLocation": {
+        "hash": "u381ce",
+        "latitude": 53.76308147622643,
+        "longitude": 11.319765327344525
+      }
+    },
+    {
+      "id": 8670,
+      "priceKm": 1.445420175657433,
+      "startLocation": {
+        "hash": "u1kze7",
+        "latitude": 53.367187357502054,
+        "longitude": 6.822626919676769
+      }
+    },
+    {
+      "id": 2378,
+      "priceKm": 2.99822031731577,
+      "startLocation": {
+        "hash": "u3028h",
+        "latitude": 50.739033142150404,
+        "longitude": 11.606148611356028
+      }
+    },
+    {
+      "id": 3502,
+      "priceKm": 1.9209432074306552,
+      "startLocation": {
+        "hash": "u1nxq8",
+        "latitude": 51.901430447410036,
+        "longitude": 9.435256551189118
+      }
+    },
+    {
+      "id": 2707,
+      "priceKm": 1.8010187292999738,
+      "startLocation": {
+        "hash": "u4p72b",
+        "latitude": 56.822301612640885,
+        "longitude": 10.238264572955563
+      }
+    },
+    {
+      "id": 6364,
+      "priceKm": 2.936583048575318,
+      "startLocation": {
+        "hash": "u3btbd",
+        "latitude": 55.870178069816944,
+        "longitude": 11.981643840774144
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 9306,
+      "pickupLocation": {
+        "hash": "u1mr3b",
+        "latitude": 53.3106603,
+        "longitude": 7.4671401
+      },
+      "deliveryLocation": {
+        "hash": "u0tbdg",
+        "latitude": 47.9170745,
+        "longitude": 8.2074298
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 5809,
+      "pickupLocation": {
+        "hash": "u1r2em",
+        "latitude": 52.148021,
+        "longitude": 10.348964
+      },
+      "deliveryLocation": {
+        "hash": "u1m5jr",
+        "latitude": 52.600356,
+        "longitude": 7.266355
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 6619,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0xepu",
+        "latitude": 48.367243,
+        "longitude": 10.898279
+      },
+      "loadFactor": 9
+    },
+    {
+      "id": 6625,
+      "pickupLocation": {
+        "hash": "u32203",
+        "latitude": 52.039425,
+        "longitude": 11.613103
+      },
+      "deliveryLocation": {
+        "hash": "u28wew",
+        "latitude": 48.9931203,
+        "longitude": 12.1088358
+      },
+      "loadFactor": 6
+    }
+  ]
+}

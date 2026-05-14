@@ -1,0 +1,102 @@
+{
+  "vehicles": [
+    {
+      "id": 5492,
+      "priceKm": 1.379282963306697,
+      "startLocation": {
+        "hash": "u1jped",
+        "latitude": 51.95910332355417,
+        "longitude": 7.192742700940475
+      }
+    },
+    {
+      "id": 246,
+      "priceKm": 1.0682917050329777,
+      "startLocation": {
+        "hash": "u0f944",
+        "latitude": 49.407217063750636,
+        "longitude": 3.6086378409120323
+      }
+    },
+    {
+      "id": 4260,
+      "priceKm": 2.4667709490769054,
+      "startLocation": {
+        "hash": "u2f497",
+        "latitude": 49.675752785003986,
+        "longitude": 14.121957104836834
+      }
+    },
+    {
+      "id": 8548,
+      "priceKm": 2.4744722574077067,
+      "startLocation": {
+        "hash": "u0zbvx",
+        "latitude": 49.38934538329443,
+        "longitude": 11.145586338379886
+      }
+    },
+    {
+      "id": 4957,
+      "priceKm": 1.2425410253137246,
+      "startLocation": {
+        "hash": "u1q4nn",
+        "latitude": 52.41793395389345,
+        "longitude": 8.701701534056948
+      }
+    },
+    {
+      "id": 1490,
+      "priceKm": 2.4517628513374734,
+      "startLocation": {
+        "hash": "u1qs6v",
+        "latitude": 52.80927276998627,
+        "longitude": 9.262687337004573
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 2719,
+      "pickupLocation": {
+        "hash": "u1qcvw",
+        "latitude": 52.374481,
+        "longitude": 9.738563
+      },
+      "deliveryLocation": {
+        "hash": "u0x7d3",
+        "latitude": 48.4360237,
+        "longitude": 10.2967196
+      },
+      "loadFactor": 4
+    },
+    {
+      "id": 10752,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0rrdb",
+        "latitude": 47.726706,
+        "longitude": 10.316884
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 1980,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u2841z",
+        "latitude": 48.202947,
+        "longitude": 11.329427
+      },
+      "loadFactor": 4
+    }
+  ]
+}

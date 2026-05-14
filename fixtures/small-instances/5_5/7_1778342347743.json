@@ -1,0 +1,121 @@
+{
+  "vehicles": [
+    {
+      "id": 8787,
+      "priceKm": 2.764476553543103,
+      "startLocation": {
+        "hash": "u0x6rc",
+        "latitude": 48.21791616571939,
+        "longitude": 10.540610539388394
+      }
+    },
+    {
+      "id": 803,
+      "priceKm": 2.8816064950214546,
+      "startLocation": {
+        "hash": "u31q3z",
+        "latitude": 51.762232955152676,
+        "longitude": 13.092990397553578
+      }
+    },
+    {
+      "id": 3596,
+      "priceKm": 1.9447314945610517,
+      "startLocation": {
+        "hash": "u2b8wn",
+        "latitude": 49.341395067491504,
+        "longitude": 12.221087543970532
+      }
+    },
+    {
+      "id": 3903,
+      "priceKm": 1.241871126425567,
+      "startLocation": {
+        "hash": "u1rvdt",
+        "latitude": 53.02580827243617,
+        "longitude": 11.011231270750178
+      }
+    },
+    {
+      "id": 8023,
+      "priceKm": 1.6488578749040568,
+      "startLocation": {
+        "hash": "u322qv",
+        "latitude": 52.10331305457705,
+        "longitude": 11.8990512364548
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": 2245,
+      "pickupLocation": {
+        "hash": "u0b1x4",
+        "latitude": 49.496622,
+        "longitude": 0.316745
+      },
+      "deliveryLocation": {
+        "hash": "u0ubne",
+        "latitude": 49.2379593,
+        "longitude": 6.9688434
+      },
+      "loadFactor": 7
+    },
+    {
+      "id": 6165,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u28146",
+        "latitude": 48.000003,
+        "longitude": 11.349995
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 8022,
+      "pickupLocation": {
+        "hash": "u28k82",
+        "latitude": 48.605431,
+        "longitude": 11.623412
+      },
+      "deliveryLocation": {
+        "hash": "u0x57d",
+        "latitude": 48.395497,
+        "longitude": 10.00589
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 9497,
+      "pickupLocation": {
+        "hash": "ezkybz",
+        "latitude": 42.010704,
+        "longitude": -4.532763
+      },
+      "deliveryLocation": {
+        "hash": "spexrh",
+        "latitude": 43.487234,
+        "longitude": 5.23429
+      },
+      "loadFactor": 8
+    },
+    {
+      "id": 6541,
+      "pickupLocation": {
+        "hash": "u28qq1",
+        "latitude": 48.918729,
+        "longitude": 11.872789
+      },
+      "deliveryLocation": {
+        "hash": "u28m3v",
+        "latitude": 48.763035,
+        "longitude": 11.68645
+      },
+      "loadFactor": 8
+    }
+  ]
+}
