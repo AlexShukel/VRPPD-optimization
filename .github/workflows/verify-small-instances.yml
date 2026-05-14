@@ -1,0 +1,44 @@
+name: Verify small instances
+
+# Manual trigger only — full 3-way verification (BF / MILP / CP-SAT) over the
+# entire frozen small-instance fixture set takes longer than typical CI budgets
+# and is meant to be run intentionally before merging model or solver changes.
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: 3-way verification (BF / MILP / CP-SAT)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-verify-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-verify-
+
+      # OR-Tools (CP-SAT) ships as a Python package and is invoked via a Python
+      # subprocess from `vrppd-or-tools`. Installing it here keeps the workflow
+      # ready for when that crate lands.
+      - name: Set up Python (for OR-Tools)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OR-Tools
+        run: pip install --upgrade pip && pip install ortools
+
+      - name: Run small-instance 3-way verification
+        run: cargo test --release -p vrppd-benchmarks --test verify_small_instances -- --nocapture
