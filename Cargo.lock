@@ -101,6 +101,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "vrppd-brute-force"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "vrppd-core",
+]
+
+[[package]]
+name = "vrppd-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"

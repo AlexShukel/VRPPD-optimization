@@ -1,0 +1,11 @@
+[package]
+name = "vrppd-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared types and primitives for the specific VRPPD problem (heterogeneous fleet, point-to-point pickup-delivery)."
+
+[dependencies]
+serde = { workspace = true }

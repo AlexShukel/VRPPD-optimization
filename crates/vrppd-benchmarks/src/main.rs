@@ -1,3 +1,3 @@
 fn main() {
-    println!("vrppd-benchmarks: harness entrypoint");
+  println!("vrppd-benchmarks: harness entrypoint");
 }
