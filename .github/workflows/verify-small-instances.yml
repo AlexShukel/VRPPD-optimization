@@ -1,8 +1,5 @@
 name: Verify small instances
 
-# Manual trigger only — full 3-way verification (BF / MILP / CP-SAT) over the
-# entire frozen small-instance fixture set takes longer than typical CI budgets
-# and is meant to be run intentionally before merging model or solver changes.
 on:
   workflow_dispatch:
 
@@ -29,9 +26,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-verify-
 
-      # OR-Tools (CP-SAT) ships as a Python package and is invoked via a Python
-      # subprocess from `vrppd-or-tools`. Installing it here keeps the workflow
-      # ready for when that crate lands.
       - name: Set up Python (for OR-Tools)
         uses: actions/setup-python@v5
         with:
