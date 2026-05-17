@@ -6,12 +6,12 @@ pub struct SolverContext<'a> {
   pub orders: &'a Vec<Order>,
   pub vehicles: &'a Vec<Vehicle>,
 
-  // Flattened matrices for cache locality.
+  // Cache matrices.
   pub dist_mat: Vec<f64>,
   pub num_nodes: usize,
   pub veh_start_mat: Vec<f64>,
 
-  // Memoisation table for the inner TSP.
+  // Memoisation table for TSP.
   pub memo: Vec<Option<InternalBestResults>>,
   pub n_orders: usize,
 

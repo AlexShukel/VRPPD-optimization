@@ -1,0 +1,17 @@
+[package]
+name = "vrppd-milp"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Exact MILP solver for the adapted VRPPD variant."
+
+[dependencies]
+vrppd-core = { workspace = true }
+highs = "2"
+
+[dev-dependencies]
+serde_json = { workspace = true }
+vrppd-brute-force = { workspace = true }
+paste = "1"

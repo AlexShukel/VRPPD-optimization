@@ -11,7 +11,9 @@ mod types;
 
 use std::collections::HashMap;
 
-use vrppd_core::{AlgorithmSolution, Problem, ProblemSolution, RouteStop, StopKind, VehicleRoute};
+use vrppd_core::{
+  AlgorithmSolution, Objective, Problem, ProblemSolution, RouteStop, StopKind, VehicleRoute,
+};
 
 use context::SolverContext;
 use tsp::solve_tsp;
@@ -53,13 +55,6 @@ pub fn solve(problem: &Problem) -> AlgorithmSolution {
     best_price_solution: price_sol,
     best_empty_solution: empty_sol,
   }
-}
-
-#[derive(Clone, Copy)]
-enum Objective {
-  Distance,
-  Price,
-  Empty,
 }
 
 fn solve_recursive(

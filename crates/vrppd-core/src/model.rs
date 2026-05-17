@@ -39,6 +39,34 @@ pub enum StopKind {
   Delivery,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum Objective {
+  #[serde(rename = "EMPTY")]
+  Empty,
+  #[serde(rename = "DISTANCE")]
+  Distance,
+  #[serde(rename = "PRICE")]
+  Price,
+}
+
+impl Objective {
+  pub fn as_str(self) -> &'static str {
+    match self {
+      Objective::Empty => "EMPTY",
+      Objective::Distance => "DISTANCE",
+      Objective::Price => "PRICE",
+    }
+  }
+
+  pub fn energy(self, sol: &ProblemSolution) -> f64 {
+    match self {
+      Objective::Empty => sol.empty_distance,
+      Objective::Distance => sol.total_distance,
+      Objective::Price => sol.total_price,
+    }
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteStop {
