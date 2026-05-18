@@ -11,17 +11,14 @@ EARTH_RADIUS_KM = 6371.0
 DIST_SCALE = 1_000_000
 
 
-def great_circle_km(lat1, lon1, lat2, lon2):
+def haversine_km(lat1, lon1, lat2, lon2):
     rlat1 = math.radians(lat1)
-    rlon1 = math.radians(lon1)
     rlat2 = math.radians(lat2)
-    rlon2 = math.radians(lon2)
-    val = (
-        math.sin(rlat1) * math.sin(rlat2)
-        + math.cos(rlat1) * math.cos(rlat2) * math.cos(rlon1 - rlon2)
-    )
-    clamped = max(-1.0, min(1.0, val))
-    return math.acos(clamped) * EARTH_RADIUS_KM
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return EARTH_RADIUS_KM * c
 
 
 def build_geometry(req):
@@ -38,7 +35,7 @@ def build_geometry(req):
     def dist_km(i, j):
         if i == j:
             return 0.0
-        return great_circle_km(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
+        return haversine_km(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
 
     return {"V": V, "N": N, "num_nodes": len(coords), "dist_km": dist_km}
 
