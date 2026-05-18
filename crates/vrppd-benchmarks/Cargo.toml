@@ -14,10 +14,12 @@ path = "src/main.rs"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-
-[dev-dependencies]
+clap = { workspace = true }
 vrppd-core = { workspace = true }
-vrppd-brute-force = { workspace = true }
 vrppd-milp = { workspace = true }
 vrppd-or-tools = { workspace = true }
 vrppd-psa = { workspace = true }
+vrppd-cea = { workspace = true }
+
+[dev-dependencies]
+vrppd-brute-force = { workspace = true }

@@ -1,5 +1,4 @@
-//! OR-Tools CP-SAT baseline for the adapted VRPPD. Shells out to a Python
-//! subprocess (`python/solver.py`) that runs `ortools.sat.python.cp_model`.
+//! OR-Tools baseline for the adapted VRPPD. Shells out to `python/solver.py` and dispatches to either the Routing Solver (`solve_routing`) or CP-SAT (`solve_cp_sat`).
 
 mod wire;
 
@@ -53,11 +52,83 @@ pub struct OrToolsResult {
   pub solve_time_ms: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoutingStrategy {
+  Pci,
+  Pca,
+}
+
+impl RoutingStrategy {
+  fn as_str(self) -> &'static str {
+    match self {
+      RoutingStrategy::Pci => "PARALLEL_CHEAPEST_INSERTION",
+      RoutingStrategy::Pca => "PATH_CHEAPEST_ARC",
+    }
+  }
+}
+
+pub fn solve_routing(
+  problem: &Problem,
+  target: Objective,
+  timeout: Duration,
+  threads: usize,
+) -> Result<OrToolsResult, OrToolsError> {
+  solve_routing_with_strategy(problem, target, timeout, threads, RoutingStrategy::Pci)
+}
+
+pub fn solve_routing_with_strategy(
+  problem: &Problem,
+  target: Objective,
+  timeout: Duration,
+  threads: usize,
+  strategy: RoutingStrategy,
+) -> Result<OrToolsResult, OrToolsError> {
+  dispatch(
+    "routing",
+    problem,
+    target,
+    timeout,
+    threads,
+    Some(strategy.as_str()),
+  )
+}
+
 pub fn solve_cp_sat(
   problem: &Problem,
   target: Objective,
   timeout: Duration,
   threads: usize,
+) -> Result<OrToolsResult, OrToolsError> {
+  dispatch("cp_sat", problem, target, timeout, threads, None)
+}
+
+pub fn solve_routing_default(
+  problem: &Problem,
+  target: Objective,
+) -> Result<OrToolsResult, OrToolsError> {
+  let threads = std::thread::available_parallelism()
+    .map(|n| n.get())
+    .unwrap_or(1);
+  solve_routing(problem, target, DEFAULT_TIMEOUT, threads)
+}
+
+pub fn solve_cp_sat_default(
+  problem: &Problem,
+  target: Objective,
+) -> Result<OrToolsResult, OrToolsError> {
+  let threads = std::thread::available_parallelism()
+    .map(|n| n.get())
+    .unwrap_or(1);
+  solve_cp_sat(problem, target, DEFAULT_TIMEOUT, threads)
+}
+
+fn dispatch(
+  solver: &str,
+  problem: &Problem,
+  target: Objective,
+  timeout: Duration,
+  threads: usize,
+  first_solution_strategy: Option<&str>,
 ) -> Result<OrToolsResult, OrToolsError> {
   if matches!(target, Objective::Empty) {
     return Err(OrToolsError::UnsupportedObjective(target));
@@ -78,9 +149,11 @@ pub fn solve_cp_sat(
   };
 
   let request = SolverRequest {
+    solver,
     objective: objective_str,
     timeout_ms: timeout.as_millis() as u64,
     threads: threads.max(1),
+    first_solution_strategy,
     problem: WireProblem {
       vehicles: problem
         .vehicles
@@ -126,16 +199,6 @@ pub fn solve_cp_sat(
     status,
     solve_time_ms,
   })
-}
-
-pub fn solve_cp_sat_default(
-  problem: &Problem,
-  target: Objective,
-) -> Result<OrToolsResult, OrToolsError> {
-  let threads = std::thread::available_parallelism()
-    .map(|n| n.get())
-    .unwrap_or(1);
-  solve_cp_sat(problem, target, DEFAULT_TIMEOUT, threads)
 }
 
 fn script_path() -> String {
@@ -240,7 +303,19 @@ mod shortcircuit_tests {
   }
 
   #[test]
-  fn empty_problem_returns_zero_optimal() {
+  fn empty_problem_routing_returns_zero_optimal() {
+    let p = Problem {
+      vehicles: vec![],
+      orders: vec![],
+    };
+    let r = solve_routing(&p, Objective::Distance, Duration::from_secs(1), 1).unwrap();
+    assert_eq!(r.objective_value, 0.0);
+    assert_eq!(r.status, OrToolsStatus::Optimal);
+    assert_eq!(r.solve_time_ms, 0);
+  }
+
+  #[test]
+  fn empty_problem_cp_sat_returns_zero_optimal() {
     let p = Problem {
       vehicles: vec![],
       orders: vec![],
@@ -248,11 +323,20 @@ mod shortcircuit_tests {
     let r = solve_cp_sat(&p, Objective::Distance, Duration::from_secs(1), 1).unwrap();
     assert_eq!(r.objective_value, 0.0);
     assert_eq!(r.status, OrToolsStatus::Optimal);
-    assert_eq!(r.solve_time_ms, 0);
   }
 
   #[test]
-  fn empty_objective_rejected() {
+  fn empty_objective_routing_rejected() {
+    let p = one_vehicle_one_order();
+    let err = solve_routing(&p, Objective::Empty, Duration::from_secs(1), 1).unwrap_err();
+    assert!(matches!(
+      err,
+      OrToolsError::UnsupportedObjective(Objective::Empty)
+    ));
+  }
+
+  #[test]
+  fn empty_objective_cp_sat_rejected() {
     let p = one_vehicle_one_order();
     let err = solve_cp_sat(&p, Objective::Empty, Duration::from_secs(1), 1).unwrap_err();
     assert!(matches!(

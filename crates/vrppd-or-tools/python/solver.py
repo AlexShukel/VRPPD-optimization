@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""
-CP-SAT driver for vrppd-or-tools: reads a JSON SolverRequest from stdin,
-runs ortools.sat.python.cp_model, writes a JSON SolverResponse to stdout.
-"""
+"""OR-Tools driver for vrppd-or-tools. Reads a JSON SolverRequest from stdin, dispatches on req["solver"] to either the Routing Solver (Guided Local Search) or CP-SAT, writes a JSON SolverResponse to stdout."""
 
 import json
 import math
+import os
 import sys
 import time
 
@@ -56,10 +54,12 @@ def _objective_weight(req, v):
 
 def self_test():
     import ortools
-    from ortools.sat.python import cp_model  # noqa: F401
+    from ortools.sat.python import cp_model
+    from ortools.constraint_solver import pywrapcp
 
     print(f"ortools version: {ortools.__version__}")
     print("cp_model: OK")
+    print("pywrapcp: OK")
     return 0
 
 
@@ -81,6 +81,86 @@ def succeed(objective_value, status, solver_runtime_ms):
         "solver_runtime_ms": int(solver_runtime_ms),
     }))
     sys.stdout.flush()
+
+
+def solve_routing(req):
+    from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
+    started = time.monotonic()
+    g = build_geometry(req)
+    V, N = g["V"], g["N"]
+    num_nodes = g["num_nodes"]
+
+    starts = list(range(V))
+    ends = list(range(V))
+    start_node_set = set(starts)
+
+    manager = pywrapcp.RoutingIndexManager(num_nodes, V, starts, ends)
+    routing = pywrapcp.RoutingModel(manager)
+
+    for v in range(V):
+        weight = _objective_weight(req, v)
+
+        def make_cb(weight_v):
+            def cb(from_index, to_index):
+                from_node = manager.IndexToNode(from_index)
+                to_node = manager.IndexToNode(to_index)
+                if to_node in start_node_set:
+                    return 0
+                return int(round(g["dist_km"](from_node, to_node) * weight_v * DIST_SCALE))
+            return cb
+
+        cb_idx = routing.RegisterTransitCallback(make_cb(weight))
+        routing.SetArcCostEvaluatorOfVehicle(cb_idx, v)
+
+    unit_cb = routing.RegisterUnaryTransitCallback(lambda _idx: 1)
+    routing.AddDimension(unit_cb, 0, 2 * N + V, True, "Order")
+    order_dim = routing.GetDimensionOrDie("Order")
+
+    weights_scaled = [int(round(DIST_SCALE / o["load_factor"])) for o in req["problem"]["orders"]]
+
+    def demand(from_index):
+        node = manager.IndexToNode(from_index)
+        if V <= node < V + N:
+            return weights_scaled[node - V]
+        if V + N <= node < V + 2 * N:
+            return -weights_scaled[node - V - N]
+        return 0
+
+    demand_cb = routing.RegisterUnaryTransitCallback(demand)
+    routing.AddDimensionWithVehicleCapacity(demand_cb, 0, [DIST_SCALE] * V, True, "Capacity")
+
+    for o in range(N):
+        p_idx = manager.NodeToIndex(V + o)
+        d_idx = manager.NodeToIndex(V + N + o)
+        routing.AddPickupAndDelivery(p_idx, d_idx)
+        routing.solver().Add(routing.VehicleVar(p_idx) == routing.VehicleVar(d_idx))
+        routing.solver().Add(order_dim.CumulVar(p_idx) <= order_dim.CumulVar(d_idx))
+
+    search = pywrapcp.DefaultRoutingSearchParameters()
+    strategy_name = req.get("first_solution_strategy") or os.environ.get(
+        "OR_TOOLS_FIRST_SOLUTION", "PARALLEL_CHEAPEST_INSERTION"
+    )
+    search.first_solution_strategy = getattr(
+        routing_enums_pb2.FirstSolutionStrategy,
+        strategy_name,
+        routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION,
+    )
+    search.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    search.time_limit.seconds = max(1, int(req["timeout_ms"] // 1000))
+
+    solution = routing.SolveWithParameters(search)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+
+    if solution is None:
+        if routing.status() == 4:
+            return succeed(0.0, "TIMED_OUT", elapsed_ms)
+        return succeed(0.0, "FAILED", elapsed_ms)
+
+    value = solution.ObjectiveValue() / DIST_SCALE
+    rs = routing.status()
+    status_str = "OPTIMAL" if rs == 7 else "FEASIBLE"
+    return succeed(value, status_str, elapsed_ms)
 
 
 def solve_cp_sat(req):
@@ -236,7 +316,8 @@ def main():
         return self_test()
 
     try:
-        from ortools.sat.python import cp_model  # noqa: F401
+        from ortools.sat.python import cp_model
+        from ortools.constraint_solver import pywrapcp
     except ImportError as e:
         fail("ortools_import", str(e))
 
@@ -245,7 +326,13 @@ def main():
     except json.JSONDecodeError as e:
         fail("invalid_request", f"stdin JSON parse: {e}")
 
-    solve_cp_sat(req)
+    solver_kind = req.get("solver")
+    if solver_kind == "routing":
+        solve_routing(req)
+    elif solver_kind == "cp_sat":
+        solve_cp_sat(req)
+    else:
+        fail("invalid_request", f"unknown solver: {solver_kind!r}")
 
 
 if __name__ == "__main__":

@@ -4,9 +4,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 pub(crate) struct SolverRequest<'a> {
+  pub solver: &'a str,
   pub objective: &'a str,
   pub timeout_ms: u64,
   pub threads: usize,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub first_solution_strategy: Option<&'a str>,
   pub problem: WireProblem,
 }
 
