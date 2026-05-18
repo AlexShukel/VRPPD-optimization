@@ -2,7 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use vrppd_brute_force::solve as bf_solve;
 use vrppd_core::{Objective, Problem};
@@ -25,26 +25,55 @@ fn verify_small_instances_three_way() {
   let cp_sat_threads = std::thread::available_parallelism()
     .map(|n| n.get())
     .unwrap_or(1);
+  eprintln!(
+    "fixtures dir: {} | MILP budget: {:?} | CP-SAT budget: {:?} | CP-SAT threads: {}",
+    fixtures.display(),
+    MILP_BUDGET,
+    CP_SAT_BUDGET,
+    cp_sat_threads,
+  );
 
+  let suite_start = Instant::now();
   let mut verified = 0usize;
   for cell in read_dir_sorted(&fixtures) {
     if !cell.is_dir() {
       continue;
     }
+    let cell_name = cell.file_name().unwrap().to_string_lossy().into_owned();
+    eprintln!("\n=== cell {cell_name} ===");
     for instance in read_dir_sorted(&cell) {
       if instance.extension().and_then(|s| s.to_str()) != Some("json") {
         continue;
       }
+      let instance_rel = format!(
+        "{}/{}",
+        cell_name,
+        instance.file_name().unwrap().to_string_lossy(),
+      );
+      let instance_start = Instant::now();
 
       let raw = fs::read_to_string(&instance)
         .unwrap_or_else(|e| panic!("read {}: {e}", instance.display()));
       let problem: Problem =
         serde_json::from_str(&raw).unwrap_or_else(|e| panic!("parse {}: {e}", instance.display()));
+      eprintln!(
+        "[{instance_rel}] V={} N={}",
+        problem.vehicles.len(),
+        problem.orders.len(),
+      );
 
+      let bf_start = Instant::now();
       let bf = bf_solve(&problem);
       let bf_distance = bf.best_distance_solution.total_distance;
       let bf_price = bf.best_price_solution.total_price;
+      eprintln!(
+        "[{instance_rel}] BF       distance={:.6} price={:.6} ({:?})",
+        bf_distance,
+        bf_price,
+        bf_start.elapsed(),
+      );
 
+      let t = Instant::now();
       let milp_d = solve_milp_with_warm_start(
         &problem,
         Objective::Distance,
@@ -53,6 +82,12 @@ fn verify_small_instances_three_way() {
         &bf.best_distance_solution,
       )
       .unwrap_or_else(|e| panic!("MILP Distance on {}: {e}", instance.display()));
+      eprintln!(
+        "[{instance_rel}] MILP-D   status={:?} value={:.6} ({:?})",
+        milp_d.status,
+        milp_d.objective_value,
+        t.elapsed(),
+      );
       assert_eq!(
         milp_d.status,
         MilpStatus::Optimal,
@@ -67,6 +102,7 @@ fn verify_small_instances_three_way() {
         bf_distance,
       );
 
+      let t = Instant::now();
       let milp_p = solve_milp_with_warm_start(
         &problem,
         Objective::Price,
@@ -75,6 +111,12 @@ fn verify_small_instances_three_way() {
         &bf.best_price_solution,
       )
       .unwrap_or_else(|e| panic!("MILP Price on {}: {e}", instance.display()));
+      eprintln!(
+        "[{instance_rel}] MILP-P   status={:?} value={:.6} ({:?})",
+        milp_p.status,
+        milp_p.objective_value,
+        t.elapsed(),
+      );
       assert_eq!(
         milp_p.status,
         MilpStatus::Optimal,
@@ -89,8 +131,15 @@ fn verify_small_instances_three_way() {
         bf_price,
       );
 
+      let t = Instant::now();
       let cps_d = solve_cp_sat(&problem, Objective::Distance, CP_SAT_BUDGET, cp_sat_threads)
         .unwrap_or_else(|e| panic!("CP-SAT Distance on {}: {e}", instance.display()));
+      eprintln!(
+        "[{instance_rel}] CP-SAT-D status={:?} value={:.6} ({:?})",
+        cps_d.status,
+        cps_d.objective_value,
+        t.elapsed(),
+      );
       assert_eq!(
         cps_d.status,
         OrToolsStatus::Optimal,
@@ -106,8 +155,15 @@ fn verify_small_instances_three_way() {
         bf_distance,
       );
 
+      let t = Instant::now();
       let cps_p = solve_cp_sat(&problem, Objective::Price, CP_SAT_BUDGET, cp_sat_threads)
         .unwrap_or_else(|e| panic!("CP-SAT Price on {}: {e}", instance.display()));
+      eprintln!(
+        "[{instance_rel}] CP-SAT-P status={:?} value={:.6} ({:?})",
+        cps_p.status,
+        cps_p.objective_value,
+        t.elapsed(),
+      );
       assert_eq!(
         cps_p.status,
         OrToolsStatus::Optimal,
@@ -124,10 +180,18 @@ fn verify_small_instances_three_way() {
       );
 
       verified += 1;
+      eprintln!(
+        "[{instance_rel}] OK (3-way agree, instance took {:?}, suite total {:?})",
+        instance_start.elapsed(),
+        suite_start.elapsed(),
+      );
     }
   }
 
-  eprintln!("verified {verified} small-instance fixtures with BF, MILP (BF-warm-started), and CP-SAT");
+  eprintln!(
+    "\nverified {verified} small-instance fixtures with BF, MILP (BF-warm-started), and CP-SAT in {:?}",
+    suite_start.elapsed(),
+  );
   assert!(verified > 0, "no small-instance fixtures found");
 }
 
