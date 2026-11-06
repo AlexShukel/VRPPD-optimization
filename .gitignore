@@ -9,3 +9,5 @@ results/stage2-tiny/
 results/stage2/pipeline.pid
 *.jsonl.tmp
 *.json.tmp
+results/stage2/models/**/val_predictions.jsonl
+results/stage2/pipeline.pid

@@ -1,0 +1,542 @@
+[
+  {
+    "cell": "20_50",
+    "instance": "0",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9211.96659618599,
+      9177.93014693345,
+      9211.96659618599
+    ],
+    "runtimes_ms": [
+      60280.269208,
+      60194.061334,
+      60083.083125000005
+    ],
+    "generations": [
+      297,
+      274,
+      293
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9177.93014693345
+  },
+  {
+    "cell": "20_50",
+    "instance": "1",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10669.650784034398,
+      10723.413077835745,
+      10737.94459407528
+    ],
+    "runtimes_ms": [
+      60263.449334,
+      60353.730333,
+      60163.274000000005
+    ],
+    "generations": [
+      242,
+      228,
+      206
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10669.650784034398
+  },
+  {
+    "cell": "20_50",
+    "instance": "2",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9606.043750443705,
+      9667.38966781247,
+      9810.293753555343
+    ],
+    "runtimes_ms": [
+      60254.057292,
+      60289.550917,
+      60080.202709
+    ],
+    "generations": [
+      199,
+      270,
+      269
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9606.043750443705
+  },
+  {
+    "cell": "20_50",
+    "instance": "3",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9271.93131011853,
+      9066.725385189464,
+      9267.342324233774
+    ],
+    "runtimes_ms": [
+      60209.745959,
+      60160.942833,
+      60084.499708
+    ],
+    "generations": [
+      285,
+      294,
+      287
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9066.725385189464
+  },
+  {
+    "cell": "20_50",
+    "instance": "4",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9191.705269993712,
+      9025.348565084016,
+      9117.30753316252
+    ],
+    "runtimes_ms": [
+      60147.8725,
+      60250.204458,
+      60208.327167
+    ],
+    "generations": [
+      308,
+      301,
+      322
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9025.348565084016
+  },
+  {
+    "cell": "20_50",
+    "instance": "5",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9753.383198968128,
+      9595.034495584758,
+      9640.129702130529
+    ],
+    "runtimes_ms": [
+      60073.710708,
+      60205.54025,
+      60072.328792
+    ],
+    "generations": [
+      301,
+      290,
+      273
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9595.034495584758
+  },
+  {
+    "cell": "20_50",
+    "instance": "6",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10831.281488305718,
+      10869.429534930972,
+      10824.82528584825
+    ],
+    "runtimes_ms": [
+      60142.167333000005,
+      60264.129792,
+      60188.077458
+    ],
+    "generations": [
+      301,
+      356,
+      288
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10824.82528584825
+  },
+  {
+    "cell": "20_50",
+    "instance": "7",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10877.661432608793,
+      10922.8854876452,
+      10590.432026653112
+    ],
+    "runtimes_ms": [
+      60233.977042,
+      60174.830084,
+      60048.819084
+    ],
+    "generations": [
+      383,
+      397,
+      302
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10590.432026653112
+  },
+  {
+    "cell": "20_50",
+    "instance": "8",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10744.82883606194,
+      10600.265211795566,
+      10635.130562273662
+    ],
+    "runtimes_ms": [
+      60132.500541,
+      60231.540833,
+      60138.04775
+    ],
+    "generations": [
+      371,
+      250,
+      262
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10600.265211795566
+  },
+  {
+    "cell": "20_50",
+    "instance": "9",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9299.397820635775,
+      9299.397820635775,
+      9446.904341043388
+    ],
+    "runtimes_ms": [
+      60237.201916,
+      60094.93608399999,
+      60202.141666
+    ],
+    "generations": [
+      275,
+      285,
+      277
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9299.397820635775
+  },
+  {
+    "cell": "20_50",
+    "instance": "10",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10333.173237115883,
+      10438.616032396101,
+      10346.023387515303
+    ],
+    "runtimes_ms": [
+      60098.774833,
+      60127.348042,
+      60090.405167
+    ],
+    "generations": [
+      305,
+      290,
+      274
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10333.173237115883
+  },
+  {
+    "cell": "20_50",
+    "instance": "11",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      8903.628030434464,
+      8999.440162697301,
+      8901.22405820953
+    ],
+    "runtimes_ms": [
+      60213.040417000004,
+      60067.830791,
+      60150.92533300001
+    ],
+    "generations": [
+      330,
+      296,
+      286
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 8901.22405820953
+  },
+  {
+    "cell": "20_50",
+    "instance": "12",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      11247.603261255515,
+      11120.01933130436,
+      10885.74887230498
+    ],
+    "runtimes_ms": [
+      60079.077,
+      60127.039292,
+      60193.779333
+    ],
+    "generations": [
+      313,
+      312,
+      304
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10885.74887230498
+  },
+  {
+    "cell": "20_50",
+    "instance": "13",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9443.197263761274,
+      9370.085158531245,
+      9323.183210318897
+    ],
+    "runtimes_ms": [
+      60178.097792,
+      60169.175583,
+      60294.781583
+    ],
+    "generations": [
+      368,
+      330,
+      264
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9323.183210318897
+  },
+  {
+    "cell": "20_50",
+    "instance": "14",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9593.40854750849,
+      9692.034695789618,
+      9708.19883323765
+    ],
+    "runtimes_ms": [
+      60251.134833000004,
+      60131.264958,
+      60125.625959
+    ],
+    "generations": [
+      321,
+      298,
+      282
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9593.40854750849
+  },
+  {
+    "cell": "20_50",
+    "instance": "15",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10450.607768776032,
+      10546.923587193502,
+      10516.612367183217
+    ],
+    "runtimes_ms": [
+      60133.748792,
+      60156.871,
+      60128.4585
+    ],
+    "generations": [
+      294,
+      331,
+      284
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 10450.607768776032
+  },
+  {
+    "cell": "20_50",
+    "instance": "16",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9196.410485698816,
+      9293.317556290753,
+      9383.990240724372
+    ],
+    "runtimes_ms": [
+      60126.168708000005,
+      60128.619334,
+      60200.720875
+    ],
+    "generations": [
+      247,
+      251,
+      305
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9196.410485698816
+  },
+  {
+    "cell": "20_50",
+    "instance": "17",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9424.435403216175,
+      9559.32835155747,
+      9424.435403216175
+    ],
+    "runtimes_ms": [
+      60098.026125,
+      60187.535833,
+      60164.279833
+    ],
+    "generations": [
+      348,
+      356,
+      328
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9424.435403216175
+  },
+  {
+    "cell": "20_50",
+    "instance": "18",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      9192.203925383208,
+      8952.027589265554,
+      9191.593921744758
+    ],
+    "runtimes_ms": [
+      60115.17625,
+      60096.339125,
+      60108.821458
+    ],
+    "generations": [
+      340,
+      321,
+      300
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 8952.027589265554
+  },
+  {
+    "cell": "20_50",
+    "instance": "19",
+    "n_orders": 50,
+    "n_vehicles": 20,
+    "runs": [
+      10035.634069881266,
+      10076.752179763636,
+      9837.31666565364
+    ],
+    "runtimes_ms": [
+      60054.070917,
+      60117.1685,
+      60199.759
+    ],
+    "generations": [
+      317,
+      311,
+      309
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 9837.31666565364
+  }
+]
