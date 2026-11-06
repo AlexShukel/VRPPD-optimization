@@ -1,0 +1,15 @@
+[project]
+name = "vrppd-nn"
+version = "0.1.0"
+description = "Neural destroy operator (B0 MLP) training and evaluation for the VRPPD LNS"
+requires-python = ">=3.12"
+dependencies = [
+  "torch>=2.4",
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "matplotlib>=3.9",
+  "scipy>=1.13",
+]
+
+[tool.setuptools]
+packages = ["vrppd_nn"]
