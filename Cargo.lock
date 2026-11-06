@@ -596,6 +596,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vrppd-lns"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rand",
+ "rand_xoshiro",
+ "rayon",
+ "serde",
+ "serde_json",
+ "vrppd-cea",
+ "vrppd-core",
+]
+
+[[package]]
 name = "vrppd-milp"
 version = "0.1.0"
 dependencies = [
