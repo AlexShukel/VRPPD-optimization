@@ -1,2 +1,11 @@
 /target
 CLAUDE.md
+.venv/
+__pycache__/
+results/stage2/labels/
+results/stage2/instances/
+results/stage2/lns/
+results/stage2-tiny/
+results/stage2/pipeline.pid
+*.jsonl.tmp
+*.json.tmp
