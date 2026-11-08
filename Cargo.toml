@@ -20,6 +20,7 @@ vrppd-milp = { path = "crates/vrppd-milp" }
 vrppd-or-tools = { path = "crates/vrppd-or-tools" }
 vrppd-psa = { path = "crates/vrppd-psa" }
 vrppd-cea = { path = "crates/vrppd-cea" }
+vrppd-lns = { path = "crates/vrppd-lns" }
 rayon = "1"
 clap = { version = "4", features = ["derive"] }
 

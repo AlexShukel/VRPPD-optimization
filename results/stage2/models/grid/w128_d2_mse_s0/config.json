@@ -1,0 +1,16 @@
+{
+  "train": "/Users/srv/Git/VRPPD-optimization/results/stage2/labels/train.jsonl",
+  "val": "/Users/srv/Git/VRPPD-optimization/results/stage2/labels/val.jsonl",
+  "out": "/Users/srv/Git/VRPPD-optimization/results/stage2/models/grid/w128_d2_mse_s0",
+  "width": 128,
+  "depth": 2,
+  "loss": "mse",
+  "dropout": 0.1,
+  "weight_decay": 0.0001,
+  "lr": 0.001,
+  "batch_states": 8,
+  "epochs": 100,
+  "patience": 10,
+  "seed": 0,
+  "limit": null
+}

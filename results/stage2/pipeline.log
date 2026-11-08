@@ -1,0 +1,188 @@
+[2026-11-06 21:08:16] pipeline start; root=results/stage2 tiny=0 pid=63370 host=Aleksandrass-Mac-mini.local cores=10 mem_gb=16
+[2026-11-06 21:08:17] === stage build: start
+    Finished `release` profile [optimized] target(s) in 7.98s
+[2026-11-06 21:08:25] === stage build: done in 8s
+[2026-11-06 21:08:25] === stage instances: start
+gen_instances: 300 instances 10x20 seed=20261001 -> results/stage2/instances/train/10_20
+gen_instances: 150 instances 20x50 seed=20261002 -> results/stage2/instances/train/20_50
+gen_instances: 30 instances 10x20 seed=20261003 -> results/stage2/instances/val/10_20
+gen_instances: 15 instances 20x50 seed=20261004 -> results/stage2/instances/val/20_50
+[2026-11-06 21:08:25] === stage instances: done in 0s
+[2026-11-06 21:08:25] === stage labels: start
+label: cell=10_20 split=train instances=300 lns_iters=5000 states=20 m=300 threads=6
+label: 5700 states from 300 instances in 1.8s -> results/stage2/labels/train_10_20.jsonl
+label: cell=20_50 split=train instances=150 lns_iters=5000 states=20 m=300 threads=6
+label: 2850 states from 150 instances in 5.0s -> results/stage2/labels/train_20_50.jsonl
+label: cell=10_20 split=val instances=30 lns_iters=5000 states=20 m=300 threads=6
+label: 570 states from 30 instances in 0.2s -> results/stage2/labels/val_10_20.jsonl
+label: cell=20_50 split=val instances=15 lns_iters=5000 states=20 m=300 threads=6
+label: 285 states from 15 instances in 0.6s -> results/stage2/labels/val_20_50.jsonl
+/Users/srv/Git/VRPPD-optimization/python/vrppd_nn/metrics.py:20: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho = spearmanr(p[m], s.z[m]).correlation
+{"n_states": 8550, "n_rows": 256500, "M": 300, "mean_rel_std_pct": 0.824413382154929, "median_rel_std_pct": 0.7164783735866289, "mean_best_minus_median_pct": 1.6661235638339227, "mean_best_try_pct": 1.6952434167844377, "mean_median_try_pct": 0.02911985295051527, "mean_frac_positive_tries": 0.19532085769980506, "frac_states_best_beats_median_by": {"0.5%": 0.6, "1.0%": 0.49871345029239766, "2.0%": 0.33801169590643276, "5.0%": 0.0695906432748538}, "random_ranking": {"spearman": -0.0010933413189802674, "precision_at_k": 0.15105750487329433}}
+/Users/srv/Git/VRPPD-optimization/python/vrppd_nn/metrics.py:20: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho = spearmanr(p[m], s.z[m]).correlation
+{"n_states": 855, "n_rows": 25650, "M": 300, "mean_rel_std_pct": 0.8725167818226597, "median_rel_std_pct": 0.7351432727040685, "mean_best_minus_median_pct": 1.6305962521698572, "mean_best_try_pct": 1.6585024557211376, "mean_median_try_pct": 0.02790620355128051, "mean_frac_positive_tries": 0.1968810916179337, "frac_states_best_beats_median_by": {"0.5%": 0.5789473684210527, "1.0%": 0.4888888888888889, "2.0%": 0.3333333333333333, "5.0%": 0.07719298245614035}, "random_ranking": {"spearman": -0.021997896480395452, "precision_at_k": 0.14307992202729042}}
+[2026-11-06 21:08:46] === stage labels: done in 21s
+[2026-11-06 21:08:46] === stage train_grid: start
+[2026-11-06 21:08:58] trained results/stage2/models/grid/w64_d2_mse_s0: {"mse": 1.5438653264931603, "spearman": 0.16960635157020118, "precision_at_k": 0.2046783625730994, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.19147173489278752, "n_states": 855,
+[2026-11-06 21:09:13] trained results/stage2/models/grid/w64_d3_mse_s0: {"mse": 1.5387493817986324, "spearman": 0.16754347119678736, "precision_at_k": 0.21267056530214423, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.20346003898635476, "n_states": 855
+[2026-11-06 21:09:27] trained results/stage2/models/grid/w128_d2_mse_s0: {"mse": 1.5332241755599167, "spearman": 0.17437667936567988, "precision_at_k": 0.2097953216374269, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.1976608187134503, "n_states": 855, 
+[2026-11-06 21:09:47] trained results/stage2/models/grid/w128_d3_mse_s0: {"mse": 1.5431091989239796, "spearman": 0.1662152365241183, "precision_at_k": 0.20229044834307994, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.18893762183235865, "n_states": 855,
+[2026-11-06 21:09:57] trained results/stage2/models/grid/w64_d2_rank_s0: {"mse": 1.6889569934645454, "spearman": 0.10624698349483912, "precision_at_k": 0.22694931773879146, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.21535087719298246, "n_states": 855
+[2026-11-06 21:10:10] trained results/stage2/models/grid/w64_d3_rank_s0: {"mse": 1.6940144012209628, "spearman": 0.1098001178619592, "precision_at_k": 0.2229044834307992, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.22441520467836257, "n_states": 855, 
+[2026-11-06 21:10:25] trained results/stage2/models/grid/w128_d2_rank_s0: {"mse": 1.6854356913741293, "spearman": 0.10767828939238513, "precision_at_k": 0.2239766081871345, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.216812865497076, "n_states": 855, "
+[2026-11-06 21:10:43] trained results/stage2/models/grid/w128_d3_rank_s0: {"mse": 1.6792722836178788, "spearman": 0.11265801693597867, "precision_at_k": 0.22729044834307993, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.22373294346978556, "n_states": 855
+[2026-11-06 21:10:43] === stage train_grid: done in 117s
+[2026-11-06 21:10:43] === stage train_best: start
+best config: {'name': 'w128_d2_mse_s0', 'width': 128, 'depth': 2, 'loss': 'mse', 'val_spearman': 0.17437667936567988, 'val_p_at_k': 0.2097953216374269, 'val_loss': 0.9444047543040494}
+[2026-11-06 21:10:59] trained results/stage2/models/best/w128_d2_mse_s1: {"mse": 1.5473747876561577, "spearman": 0.17035795922087843, "precision_at_k": 0.2067738791423002, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.20521442495126704, "n_states": 855,
+[2026-11-06 21:11:14] trained results/stage2/models/best/w128_d2_mse_s2: {"mse": 1.5443770301126458, "spearman": 0.16984625334564113, "precision_at_k": 0.21159844054580895, "precision_at_k_random": 0.1533333333333333, "best_set_recall": 0.1935185185185185, "n_states": 855,
+[2026-11-06 21:11:14] === stage train_best: done in 31s
+[2026-11-06 21:11:14] === stage lns_iters: start
+lns: cell=10_10 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.2s -> results/stage2/lns/iters5000/random/10_10
+lns: cell=10_10 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.2s -> results/stage2/lns/iters5000/worst/10_10
+lns: cell=10_10 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.2s -> results/stage2/lns/iters5000/related/10_10
+lns: cell=10_10 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.2s -> results/stage2/lns/iters5000/adaptive/10_10
+lns: cell=10_10 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 5.3s -> results/stage2/lns/iters5000/neural/10_10
+lns: cell=10_10 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 5.5s -> results/stage2/lns/iters5000/neural_tau/10_10
+lns: cell=10_20 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.4s -> results/stage2/lns/iters5000/random/10_20
+lns: cell=10_20 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.4s -> results/stage2/lns/iters5000/worst/10_20
+lns: cell=10_20 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.4s -> results/stage2/lns/iters5000/related/10_20
+lns: cell=10_20 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 0.4s -> results/stage2/lns/iters5000/adaptive/10_20
+lns: cell=10_20 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 11.2s -> results/stage2/lns/iters5000/neural/10_20
+lns: cell=10_20 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 10.5s -> results/stage2/lns/iters5000/neural_tau/10_20
+lns: cell=20_50 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 1.9s -> results/stage2/lns/iters5000/random/20_50
+lns: cell=20_50 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 1.9s -> results/stage2/lns/iters5000/worst/20_50
+lns: cell=20_50 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 1.7s -> results/stage2/lns/iters5000/related/20_50
+lns: cell=20_50 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 2.2s -> results/stage2/lns/iters5000/adaptive/20_50
+lns: cell=20_50 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 27.5s -> results/stage2/lns/iters5000/neural/20_50
+lns: cell=20_50 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=Some(5000) secs=None
+lns: 100 runs written (0 skipped) in 28.9s -> results/stage2/lns/iters5000/neural_tau/20_50
+[2026-11-06 21:12:53] === stage lns_iters: done in 99s
+[2026-11-06 21:12:53] === stage cea_reference: start
+cea_ref: cell=10_10 instances=20 runs=3 seconds=60 threads=6
+cea_ref: 10_10/0 best=2240.669 runs=["2240.7", "2240.7", "2240.7"] times=["1", "2", "1"]
+cea_ref: 10_10/1 best=3493.847 runs=["3493.8", "3493.8", "3493.8"] times=["1", "1", "1"]
+cea_ref: 10_10/2 best=5083.011 runs=["5083.0", "5083.0", "5083.0"] times=["1", "1", "1"]
+cea_ref: 10_10/3 best=3595.153 runs=["3595.2", "3595.2", "3595.2"] times=["1", "1", "1"]
+cea_ref: 10_10/4 best=2129.779 runs=["2129.8", "2129.8", "2129.8"] times=["1", "2", "1"]
+cea_ref: 10_10/5 best=4890.745 runs=["5027.9", "5027.9", "4890.7"] times=["1", "1", "2"]
+cea_ref: 10_10/6 best=3108.384 runs=["3108.4", "3108.4", "3108.4"] times=["1", "1", "1"]
+cea_ref: 10_10/7 best=4248.706 runs=["4248.7", "4248.7", "4248.7"] times=["1", "2", "1"]
+cea_ref: 10_10/8 best=3511.289 runs=["3511.3", "3511.3", "3511.3"] times=["1", "1", "1"]
+cea_ref: 10_10/9 best=2527.300 runs=["2527.3", "2527.3", "2527.3"] times=["1", "1", "1"]
+cea_ref: 10_10/10 best=2091.473 runs=["2092.0", "2091.5", "2091.5"] times=["1", "1", "1"]
+cea_ref: 10_10/11 best=3556.689 runs=["3556.7", "3556.7", "3556.7"] times=["1", "1", "1"]
+cea_ref: 10_10/12 best=3165.703 runs=["3274.5", "3274.5", "3165.7"] times=["1", "2", "2"]
+cea_ref: 10_10/13 best=4702.650 runs=["4702.6", "4702.6", "4702.6"] times=["2", "2", "2"]
+cea_ref: 10_10/14 best=4168.776 runs=["4168.8", "4185.1", "4168.8"] times=["1", "1", "1"]
+cea_ref: 10_10/15 best=1654.405 runs=["1654.4", "1654.4", "1654.4"] times=["1", "1", "2"]
+cea_ref: 10_10/16 best=3158.352 runs=["3158.4", "3158.4", "3158.4"] times=["1", "1", "1"]
+cea_ref: 10_10/17 best=6230.746 runs=["6230.7", "6230.7", "6230.7"] times=["1", "1", "1"]
+cea_ref: 10_10/18 best=3941.189 runs=["3971.1", "3971.1", "3941.2"] times=["1", "1", "2"]
+cea_ref: 10_10/19 best=4122.627 runs=["4122.6", "4122.6", "4122.6"] times=["1", "1", "1"]
+cea_ref: 20 records -> results/stage2/reference/cea_ref_10_10.json
+cea_ref: cell=10_20 instances=20 runs=3 seconds=60 threads=6
+cea_ref: 10_20/0 best=5165.896 runs=["5165.9", "5165.9", "5165.9"] times=["14", "15", "14"]
+cea_ref: 10_20/1 best=3987.872 runs=["3987.9", "3987.9", "3987.9"] times=["13", "11", "12"]
+cea_ref: 10_20/2 best=6388.907 runs=["6388.9", "6388.9", "6400.7"] times=["9", "9", "9"]
+cea_ref: 10_20/3 best=5879.960 runs=["5880.0", "5917.3", "5917.3"] times=["11", "10", "10"]
+cea_ref: 10_20/4 best=4704.127 runs=["4704.1", "4763.3", "4763.3"] times=["15", "11", "11"]
+cea_ref: 10_20/5 best=4631.788 runs=["4837.4", "4631.8", "4631.8"] times=["14", "16", "15"]
+cea_ref: 10_20/6 best=7048.910 runs=["7048.9", "7066.0", "7058.5"] times=["12", "12", "9"]
+cea_ref: 10_20/7 best=8210.150 runs=["8647.2", "8210.2", "8302.2"] times=["14", "14", "14"]
+cea_ref: 10_20/8 best=4767.781 runs=["4787.9", "4768.0", "4767.8"] times=["9", "9", "9"]
+cea_ref: 10_20/9 best=5461.116 runs=["5461.1", "5461.1", "5554.4"] times=["10", "10", "15"]
+cea_ref: 10_20/10 best=6367.970 runs=["6414.2", "6368.0", "6368.0"] times=["9", "9", "9"]
+cea_ref: 10_20/11 best=5060.764 runs=["5190.4", "5060.8", "5183.7"] times=["11", "12", "10"]
+cea_ref: 10_20/12 best=4917.684 runs=["4999.9", "4917.7", "4917.7"] times=["13", "14", "15"]
+cea_ref: 10_20/13 best=5043.056 runs=["5043.1", "5043.1", "5043.1"] times=["10", "10", "10"]
+cea_ref: 10_20/14 best=5579.204 runs=["5613.5", "5579.2", "5613.5"] times=["14", "14", "14"]
+cea_ref: 10_20/15 best=5474.441 runs=["5474.4", "5474.4", "5474.4"] times=["8", "9", "17"]
+cea_ref: 10_20/16 best=6287.954 runs=["6288.0", "6352.5", "6288.0"] times=["12", "12", "12"]
+cea_ref: 10_20/17 best=5993.943 runs=["5993.9", "5993.9", "5993.9"] times=["9", "9", "9"]
+cea_ref: 10_20/18 best=7155.731 runs=["7163.0", "7155.7", "7155.7"] times=["8", "11", "11"]
+cea_ref: 10_20/19 best=4268.817 runs=["4330.7", "4474.6", "4268.8"] times=["23", "8", "14"]
+cea_ref: 20 records -> results/stage2/reference/cea_ref_10_20.json
+cea_ref: cell=20_50 instances=20 runs=3 seconds=60 threads=6
+cea_ref: 20_50/0 best=9177.930 runs=["9212.0", "9177.9", "9212.0"] times=["60", "60", "60"]
+cea_ref: 20_50/1 best=10669.651 runs=["10669.7", "10723.4", "10737.9"] times=["60", "60", "60"]
+cea_ref: 20_50/2 best=9606.044 runs=["9606.0", "9667.4", "9810.3"] times=["60", "60", "60"]
+cea_ref: 20_50/3 best=9066.725 runs=["9271.9", "9066.7", "9267.3"] times=["60", "60", "60"]
+cea_ref: 20_50/4 best=9025.349 runs=["9191.7", "9025.3", "9117.3"] times=["60", "60", "60"]
+cea_ref: 20_50/5 best=9595.034 runs=["9753.4", "9595.0", "9640.1"] times=["60", "60", "60"]
+cea_ref: 20_50/6 best=10824.825 runs=["10831.3", "10869.4", "10824.8"] times=["60", "60", "60"]
+cea_ref: 20_50/7 best=10590.432 runs=["10877.7", "10922.9", "10590.4"] times=["60", "60", "60"]
+cea_ref: 20_50/8 best=10600.265 runs=["10744.8", "10600.3", "10635.1"] times=["60", "60", "60"]
+cea_ref: 20_50/9 best=9299.398 runs=["9299.4", "9299.4", "9446.9"] times=["60", "60", "60"]
+cea_ref: 20_50/10 best=10333.173 runs=["10333.2", "10438.6", "10346.0"] times=["60", "60", "60"]
+cea_ref: 20_50/11 best=8901.224 runs=["8903.6", "8999.4", "8901.2"] times=["60", "60", "60"]
+cea_ref: 20_50/12 best=10885.749 runs=["11247.6", "11120.0", "10885.7"] times=["60", "60", "60"]
+cea_ref: 20_50/13 best=9323.183 runs=["9443.2", "9370.1", "9323.2"] times=["60", "60", "60"]
+cea_ref: 20_50/14 best=9593.409 runs=["9593.4", "9692.0", "9708.2"] times=["60", "60", "60"]
+cea_ref: 20_50/15 best=10450.608 runs=["10450.6", "10546.9", "10516.6"] times=["60", "60", "60"]
+cea_ref: 20_50/16 best=9196.410 runs=["9196.4", "9293.3", "9384.0"] times=["60", "60", "60"]
+cea_ref: 20_50/17 best=9424.435 runs=["9424.4", "9559.3", "9424.4"] times=["60", "60", "60"]
+cea_ref: 20_50/18 best=8952.028 runs=["9192.2", "8952.0", "9191.6"] times=["60", "60", "60"]
+cea_ref: 20_50/19 best=9837.317 runs=["10035.6", "10076.8", "9837.3"] times=["60", "60", "60"]
+cea_ref: 20 records -> results/stage2/reference/cea_ref_20_50.json
+[2026-11-06 22:26:08] === stage cea_reference: done in 4395s
+[2026-11-06 22:26:08] === stage lns_time: start
+lns: cell=10_10 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 540.0s -> results/stage2/lns/time30s/random/10_10
+lns: cell=10_10 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 540.0s -> results/stage2/lns/time30s/worst/10_10
+lns: cell=10_10 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/related/10_10
+lns: cell=10_10 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/adaptive/10_10
+lns: cell=10_10 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/neural/10_10
+lns: cell=10_10 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/neural_tau/10_10
+lns: cell=10_20 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/random/10_20
+lns: cell=10_20 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/worst/10_20
+lns: cell=10_20 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/related/10_20
+lns: cell=10_20 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/adaptive/10_20
+lns: cell=10_20 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/neural/10_20
+lns: cell=10_20 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/neural_tau/10_20
+lns: cell=20_50 operator=random instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 540.0s -> results/stage2/lns/time30s/random/20_50
+lns: cell=20_50 operator=worst instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/worst/20_50
+lns: cell=20_50 operator=related instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 540.0s -> results/stage2/lns/time30s/related/20_50
+lns: cell=20_50 operator=adaptive instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.0s -> results/stage2/lns/time30s/adaptive/20_50
+lns: cell=20_50 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 510.1s -> results/stage2/lns/time30s/neural/20_50
+lns: cell=20_50 operator=neural instances=20 repeats=5 jobs=100 threads=6 iters=None secs=Some(30.0)
+lns: 100 runs written (0 skipped) in 540.1s -> results/stage2/lns/time30s/neural_tau/20_50
+[2026-11-07 01:01:39] === stage lns_time: done in 9331s
+[2026-11-07 01:01:39] === stage aggregate: start
+[2026-11-07 01:01:43] === stage aggregate: done in 4s
+[2026-11-07 01:01:43] pipeline finished

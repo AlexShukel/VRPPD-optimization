@@ -18,4 +18,4 @@ pub use local_improvement::local_improve;
 pub use population::{Individual, Population};
 pub use recombination::recombine;
 pub use reproduction::reproduce_elite;
-pub use rscim::{generate_rscim, generate_rscim_seeded};
+pub use rscim::{generate_rscim, generate_rscim_seeded, insert_cheapest};

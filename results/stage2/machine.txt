@@ -1,0 +1,10 @@
+hostname: Aleksandrass-Mac-mini.local
+date: Fri Nov  6 21:08:16 EET 2026
+os: macOS 26.4.1
+cpu: Apple M4 (10 cores)
+memory_gb: 16
+rustc: rustc 1.95.0 (59807616e 2026-04-14)
+python: Python 3.12.16 torch 2.15.0
+git: 8957147 (feat/neural-lns-stage2)
+caps: RAYON_NUM_THREADS=6 torch threads=4 CEA threads=6
+config: train=300+150 val=30+15 label_iters=5000 states=20 M=300 lns_iters=5000 lns_seconds=30 repeats=5 cea_runs=3 cea_seconds=60

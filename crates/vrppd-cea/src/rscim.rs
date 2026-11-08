@@ -102,7 +102,7 @@ struct Insertion {
   cost: f64,
 }
 
-pub(crate) fn insert_cheapest(
+pub fn insert_cheapest(
   sol: &mut WorkingSolution,
   o_idx: usize,
   problem: &Problem,

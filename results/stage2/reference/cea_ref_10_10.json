@@ -1,0 +1,542 @@
+[
+  {
+    "cell": "10_10",
+    "instance": "0",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      2240.6688425503307,
+      2240.6688425503307,
+      2240.6688425503307
+    ],
+    "runtimes_ms": [
+      1355.411875,
+      1531.837458,
+      1349.620166
+    ],
+    "generations": [
+      500,
+      501,
+      501
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 2240.6688425503307
+  },
+  {
+    "cell": "10_10",
+    "instance": "1",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3493.84721026193,
+      3493.84721026193,
+      3493.84721026193
+    ],
+    "runtimes_ms": [
+      1065.704958,
+      1008.939042,
+      983.352583
+    ],
+    "generations": [
+      500,
+      500,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3493.84721026193
+  },
+  {
+    "cell": "10_10",
+    "instance": "2",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      5083.011394046323,
+      5083.011394046323,
+      5083.011394046323
+    ],
+    "runtimes_ms": [
+      1398.3846660000002,
+      1364.070291,
+      1393.380167
+    ],
+    "generations": [
+      502,
+      501,
+      503
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 5083.011394046323
+  },
+  {
+    "cell": "10_10",
+    "instance": "3",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3595.152916325603,
+      3595.152916325603,
+      3595.152916325603
+    ],
+    "runtimes_ms": [
+      1165.88125,
+      1242.200292,
+      1152.974292
+    ],
+    "generations": [
+      501,
+      502,
+      501
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3595.152916325603
+  },
+  {
+    "cell": "10_10",
+    "instance": "4",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      2129.778969805405,
+      2129.778969805405,
+      2129.778969805405
+    ],
+    "runtimes_ms": [
+      1422.25825,
+      1588.3091670000001,
+      1400.502209
+    ],
+    "generations": [
+      501,
+      555,
+      505
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 2129.778969805405
+  },
+  {
+    "cell": "10_10",
+    "instance": "5",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      5027.905399640519,
+      5027.905399640519,
+      4890.745424236458
+    ],
+    "runtimes_ms": [
+      837.984667,
+      870.148083,
+      1698.193709
+    ],
+    "generations": [
+      500,
+      500,
+      776
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 4890.745424236458
+  },
+  {
+    "cell": "10_10",
+    "instance": "6",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3108.3844346538435,
+      3108.3844346538435,
+      3108.3844346538435
+    ],
+    "runtimes_ms": [
+      1166.685666,
+      1209.1966670000002,
+      1238.248167
+    ],
+    "generations": [
+      501,
+      500,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3108.3844346538435
+  },
+  {
+    "cell": "10_10",
+    "instance": "7",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      4248.705625712322,
+      4248.705625712322,
+      4248.705625712322
+    ],
+    "runtimes_ms": [
+      1471.118583,
+      1526.155333,
+      1390.9164170000001
+    ],
+    "generations": [
+      502,
+      502,
+      501
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 4248.705625712322
+  },
+  {
+    "cell": "10_10",
+    "instance": "8",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3511.2893368986074,
+      3511.2893368986074,
+      3511.2893368986074
+    ],
+    "runtimes_ms": [
+      1083.382625,
+      981.471708,
+      941.2755000000001
+    ],
+    "generations": [
+      500,
+      500,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3511.2893368986074
+  },
+  {
+    "cell": "10_10",
+    "instance": "9",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      2527.300179458843,
+      2527.300179458843,
+      2527.300179458843
+    ],
+    "runtimes_ms": [
+      1128.828875,
+      1063.205334,
+      1154.514958
+    ],
+    "generations": [
+      500,
+      500,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 2527.300179458843
+  },
+  {
+    "cell": "10_10",
+    "instance": "10",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      2092.0032623695233,
+      2091.47268111999,
+      2091.47268111999
+    ],
+    "runtimes_ms": [
+      1310.179708,
+      1466.999333,
+      1356.027791
+    ],
+    "generations": [
+      500,
+      503,
+      502
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 2091.47268111999
+  },
+  {
+    "cell": "10_10",
+    "instance": "11",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3556.689430240733,
+      3556.689430240733,
+      3556.689430240733
+    ],
+    "runtimes_ms": [
+      1118.792416,
+      1078.796709,
+      1037.74575
+    ],
+    "generations": [
+      501,
+      501,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3556.689430240733
+  },
+  {
+    "cell": "10_10",
+    "instance": "12",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3274.477425763307,
+      3274.477425763307,
+      3165.703216499874
+    ],
+    "runtimes_ms": [
+      1361.3031250000001,
+      1577.12575,
+      1646.557833
+    ],
+    "generations": [
+      505,
+      501,
+      505
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3165.703216499874
+  },
+  {
+    "cell": "10_10",
+    "instance": "13",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      4702.649838703832,
+      4702.649838703832,
+      4702.649838703832
+    ],
+    "runtimes_ms": [
+      1899.025375,
+      1759.45,
+      1736.9912080000001
+    ],
+    "generations": [
+      508,
+      512,
+      503
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 4702.649838703832
+  },
+  {
+    "cell": "10_10",
+    "instance": "14",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      4168.775761724348,
+      4185.082112298588,
+      4168.775761724348
+    ],
+    "runtimes_ms": [
+      1405.449625,
+      1148.803125,
+      1461.461458
+    ],
+    "generations": [
+      502,
+      503,
+      506
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 4168.775761724348
+  },
+  {
+    "cell": "10_10",
+    "instance": "15",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      1654.4047526962781,
+      1654.4047526962781,
+      1654.4047526962781
+    ],
+    "runtimes_ms": [
+      1323.316792,
+      1280.124875,
+      1501.984208
+    ],
+    "generations": [
+      501,
+      501,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 1654.4047526962781
+  },
+  {
+    "cell": "10_10",
+    "instance": "16",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3158.3524045313416,
+      3158.3524045313416,
+      3158.3524045313416
+    ],
+    "runtimes_ms": [
+      1034.591125,
+      1080.922834,
+      1088.8498749999999
+    ],
+    "generations": [
+      503,
+      501,
+      528
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3158.3524045313416
+  },
+  {
+    "cell": "10_10",
+    "instance": "17",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      6230.745700859178,
+      6230.745700859178,
+      6230.745700859178
+    ],
+    "runtimes_ms": [
+      1262.9754580000001,
+      1156.698917,
+      1223.597208
+    ],
+    "generations": [
+      501,
+      502,
+      502
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6230.745700859178
+  },
+  {
+    "cell": "10_10",
+    "instance": "18",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      3971.1308653581773,
+      3971.1308653581773,
+      3941.189165526821
+    ],
+    "runtimes_ms": [
+      1304.15825,
+      1256.1190840000002,
+      1693.645375
+    ],
+    "generations": [
+      501,
+      502,
+      514
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 3941.189165526821
+  },
+  {
+    "cell": "10_10",
+    "instance": "19",
+    "n_orders": 10,
+    "n_vehicles": 10,
+    "runs": [
+      4122.627336552177,
+      4122.627336552177,
+      4122.627336552177
+    ],
+    "runtimes_ms": [
+      1024.1527079999998,
+      1005.7230420000001,
+      1046.965208
+    ],
+    "generations": [
+      500,
+      500,
+      500
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 4122.627336552177
+  }
+]
