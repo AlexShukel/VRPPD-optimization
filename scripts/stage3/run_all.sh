@@ -238,16 +238,33 @@ op_args() { # operator -> OP_ARGS (neural operators take weights and tau from se
   OP_ARGS=(--operator "$operator" --weights "$ROOT/$weights" --tau "$tau")
 }
 
-# Training runs as background jobs, at most JOBS at once. Each job writes only its own model
-# directory (seeds are per model), so its result does not depend on what runs beside it; the
-# batch picks best configurations and writes best.json itself, after phase_wait.
-JOBS=1 FAILED=()
+# Training runs as background jobs, at most JOBS at once, each with ITER_THREADS / JOBS threads.
+# Each job writes only its own model directory (seeds are per model); the batch picks best
+# configurations and writes best.json itself, after phase_wait. After a failed job no further job
+# of the phase starts. On any exit (die, error, INT/TERM/HUP) the EXIT trap stops running jobs.
+JOBS=1 FAILED=() NOT_STARTED=0
 declare -A JOB_OUT=()
+
+stop_jobs() { # SIGTERM to every running training job, then wait for them
+  local pid
+  ((${#JOB_OUT[@]} == 0)) || echo "[$(date '+%F %T')] run_all: stopping ${#JOB_OUT[@]} training jobs: ${JOB_OUT[*]}" >&2
+  for pid in "${!JOB_OUT[@]}"; do kill -TERM "$pid" 2> /dev/null || true; done
+  for pid in "${!JOB_OUT[@]}"; do wait "$pid" 2> /dev/null || true; done
+  JOB_OUT=()
+}
+
+leftover_jobs() { # pids of training processes (of any earlier pipeline) writing into this root
+  local pid args
+  for pid in $(pgrep -f 'vrppd_nn\.(train|train_v1|reinforce)( |$)' || true); do
+    args=$(ps -p "$pid" -o args= 2> /dev/null || true)
+    if [[ $args == *"$ROOT/"* ]]; then echo "$pid"; fi
+  done
+}
 
 reap_one() { # wait for one training job; log it, or remember it as failed
   local pid="" status=0 out
   wait -n -p pid || status=$?
-  [[ -n $pid ]] || return 0
+  [[ -n $pid ]] || die "wait -n returned status $status without a job; running jobs: $(declare -p JOB_OUT)"
   out=${JOB_OUT[$pid]}
   unset "JOB_OUT[$pid]"
   if ((status == 0)); then
@@ -263,9 +280,9 @@ phase_wait() { # end of a phase: reap every job; fail the batch (no DONE) if any
   ((${#FAILED[@]})) || return 0
   for out in "${FAILED[@]}"; do
     echo "--- $out/train.log, last lines:" >&2
-    tail -5 "$out/train.log" >&2 2> /dev/null || echo "(no train.log)" >&2
+    if [[ -f $out/train.log ]]; then tail -5 "$out/train.log" >&2; else echo "(no readable train.log)" >&2; fi
   done
-  die "training failed in batch $BATCH (${#FAILED[@]} models): ${FAILED[*]}; DONE not written"
+  die "training failed in batch $BATCH (${#FAILED[@]} models): ${FAILED[*]}; $NOT_STARTED models of the phase not started; DONE not written"
 }
 
 train_model() { # module out train-args...; models are ranked by precision at k against the best try,
@@ -275,10 +292,16 @@ train_model() { # module out train-args...; models are ranked by precision at k 
   RUNS=$((RUNS + 1))
   expect file "$out/metrics.json"
   if [[ -f $out/metrics.json ]]; then return; fi
-  while ((${#JOB_OUT[@]} >= JOBS)); do reap_one; done
+  while ((${#JOB_OUT[@]} >= JOBS && ${#FAILED[@]} == 0)); do reap_one; done
+  if ((${#FAILED[@]})); then # a job of this phase failed: start nothing more, phase_wait fails the batch
+    NOT_STARTED=$((NOT_STARTED + 1))
+    return
+  fi
+  local threads=$((ITER_THREADS / JOBS > 1 ? ITER_THREADS / JOBS : 1))
   mkdir -p "$out"
-  "$PY" -m "vrppd_nn.$module" --train "$LABELS/train.jsonl" --val "$LABELS/val.jsonl" --out "$out" --device auto \
-    --select-by best_try --epochs "$EPOCHS" --patience "$PATIENCE" "$@" > "$out/train.log" 2>&1 &
+  OMP_NUM_THREADS=$threads MKL_NUM_THREADS=$threads "$PY" -m "vrppd_nn.$module" --train "$LABELS/train.jsonl" \
+    --val "$LABELS/val.jsonl" --out "$out" --device auto --threads "$threads" --select-by best_try \
+    --epochs "$EPOCHS" --patience "$PATIENCE" "$@" > "$out/train.log" 2>&1 &
   JOB_OUT[$!]=$out
 }
 
@@ -586,7 +609,7 @@ run_batch() {
   else
     echo "$HOST_NAME $(date '+%FT%T')" > "$d/STARTED"
   fi
-  BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=() FAILED=() JOBS=1
+  BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=() FAILED=() NOT_STARTED=0 JOBS=1
   log "=== batch $b: start"
   case $b in
     data) batch_data ;;
@@ -638,8 +661,18 @@ if [[ -f $LOCK ]]; then
   fi
   log "removing stale lock $LOCK (pid ${old:-?})"
 fi
+left=$(leftover_jobs | tr '\n' ' ')
+[[ -z $left ]] || die "training processes of an earlier pipeline still write into $ROOT (pids: ${left% }); kill them (kill ${left% }) and start again"
 echo $$ > "$LOCK.tmp" && mv "$LOCK.tmp" "$LOCK"
-trap 'if [[ "$(cat "$LOCK" 2> /dev/null)" == "$$" ]]; then rm -f "$LOCK"; fi' EXIT
+# stop the training jobs before the lock is released; signals exit through the EXIT trap
+on_exit() {
+  [[ $BASHPID == "$$" ]] || return 0 # not in subshells
+  stop_jobs
+  if [[ "$(cat "$LOCK" 2> /dev/null)" == "$$" ]]; then rm -f "$LOCK"; fi
+}
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 log "pipeline start: root=$ROOT host=$HOST_NAME smoke=$SMOKE pid=$$ iter_threads=$ITER_THREADS timed_threads=$TIMED_THREADS taskset=$CPU_LIST"
 check_disk
