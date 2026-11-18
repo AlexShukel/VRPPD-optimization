@@ -19,6 +19,9 @@ results/stage3/pipeline.pid
 results/stage3/models/**/val_predictions.jsonl
 results/stage3/models/**/checkpoint.pt
 results/stage3/models/**/train.log
+# only the selected models' weights are committed (force-added at commit time)
+results/stage3/models/**/weights.json
+results/stage3/runs.csv
 results/stage3/batches/*/STARTED
 results/stage3/batches/*/probe/
 results/stage3-smoke/
