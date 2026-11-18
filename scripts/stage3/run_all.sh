@@ -87,7 +87,7 @@ if [[ $SMOKE == 1 ]]; then
   EPOCHS=2 PATIENCE=2
   B0_WIDTHS="64" B0_DEPTHS="2" LOSSES="mse rank" TARGETS="mean top" TRAIN_SIZES="2 6" SEEDS="0 1"
   V1_DS="16" V1_NATTS="1 2" V1_DROPOUTS="0 0.1" V1_WDS="0 1e-4"
-  V2_MAX_HOURS=0.03 V2_EXTRA="--batch-envs 2 --horizon 5 --max-episodes 2"
+  V2_MAX_HOURS=0.03 V2_EXTRA=${V2_EXTRA:-"--batch-envs 2 --horizon 5 --max-episodes 2"} # env: interruption tests
   SEL_TAUS="0.1 1.0" SEL_ITERS=100 SEL_REPEATS=1
   TEST_INST=2 REPEATS=2 ITERS=200 TIME_BUDGET=2
   REF_RUNS=1 REF_SECONDS=2 LARGE_REF_RUNS=1 OBJ_REF_RUNS=1
@@ -132,7 +132,8 @@ pick_best() { "$PY" -m vrppd_nn.aggregate3 pick-best "$@"; }
 count_json() {
   if [[ -d $1 ]]; then find "$1" -maxdepth 1 -name '*.json' | wc -l | tr -d ' '; else echo 0; fi
 }
-pin() { if [[ -n $TIMED_CPUS ]]; then taskset -c "$TIMED_CPUS" "$@"; else "$@"; fi; }
+PIN=() # prefix of wall-time commands
+if [[ -n $TIMED_CPUS ]]; then PIN=(taskset -c "$TIMED_CPUS"); fi
 cpu_model() {
   if [[ -r /proc/cpuinfo ]]; then grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//'
   else sysctl -n machdep.cpu.brand_string 2> /dev/null || echo unknown; fi
@@ -205,16 +206,17 @@ run_lns() { # out iters|timed lns-args (with --max-instances, optionally --repea
   [[ -n $n ]] || die "run_lns $out: --max-instances missing"
   expect runs "$out" $((n * r))
   if [[ $mode == timed ]]; then
-    pin "$BIN/lns" "$@" --out "$out" --threads "$TIMED_THREADS" --host-tag "$HOST_NAME" --cpu-list "$CPU_LIST"
+    run_tracked "${PIN[@]}" "$BIN/lns" "$@" --out "$out" --threads "$TIMED_THREADS" --host-tag "$HOST_NAME" \
+      --cpu-list "$CPU_LIST"
   else
-    "$BIN/lns" "$@" --out "$out" --threads "$ITER_THREADS" --host-tag "$HOST_NAME" --cpu-list none
+    run_tracked "$BIN/lns" "$@" --out "$out" --threads "$ITER_THREADS" --host-tag "$HOST_NAME" --cpu-list none
   fi
   RUNS=$((RUNS + $(count_json "$out")))
 }
 
 run_ref() { # out cell runs instances objective
   expect refs "$1" "$4" "$3"
-  pin "$BIN/cea_ref" --cell "$2" --objective "$5" --runs "$3" --seconds "$REF_SECONDS" --threads "$TIMED_THREADS" \
+  run_tracked "${PIN[@]}" "$BIN/cea_ref" --cell "$2" --objective "$5" --runs "$3" --seconds "$REF_SECONDS" --threads "$TIMED_THREADS" \
     --max-instances "$4" --out "$1" --host-tag "$HOST_NAME" --cpu-list "$CPU_LIST"
   RUNS=$((RUNS + $("$PY" -c 'import json, sys; print(len(json.load(open(sys.argv[1]))))' "$1")))
 }
@@ -245,12 +247,29 @@ op_args() { # operator -> OP_ARGS (neural operators take weights and tau from se
 JOBS=1 FAILED=() NOT_STARTED=0
 declare -A JOB_OUT=()
 
-stop_jobs() { # SIGTERM to every running training job, then wait for them
-  local pid
-  ((${#JOB_OUT[@]} == 0)) || echo "[$(date '+%F %T')] run_all: stopping ${#JOB_OUT[@]} training jobs: ${JOB_OUT[*]}" >&2
-  for pid in "${!JOB_OUT[@]}"; do kill -TERM "$pid" 2> /dev/null || true; done
-  for pid in "${!JOB_OUT[@]}"; do wait "$pid" 2> /dev/null || true; done
-  JOB_OUT=()
+# Long-running commands also run in the background, so that a trapped signal interrupts the
+# shell's wait at once (bash defers traps while a foreground command runs) and stop_jobs can stop
+# them. Output goes where it went before; the exit status is the command's, so errexit is unchanged.
+declare -A FG_JOB=()
+exec {LOG_FD}>&2
+
+run_tracked() { # command... (a program, not a shell function)
+  local pid status=0
+  "$@" &
+  pid=$!
+  FG_JOB[$pid]=${1##*/}
+  wait "$pid" || status=$?
+  unset "FG_JOB[$pid]"
+  return "$status"
+}
+
+stop_jobs() { # SIGTERM to every running training job and tracked command, then wait for them
+  local pid # messages go to the pipeline's stderr, even when the trap fires inside a redirected call
+  ((${#JOB_OUT[@]} == 0)) || echo "[$(date '+%F %T')] run_all: stopping ${#JOB_OUT[@]} training jobs: ${JOB_OUT[*]}" >&"$LOG_FD"
+  ((${#FG_JOB[@]} == 0)) || echo "[$(date '+%F %T')] run_all: stopping ${FG_JOB[*]} (pid ${!FG_JOB[*]})" >&"$LOG_FD"
+  for pid in "${!JOB_OUT[@]}" "${!FG_JOB[@]}"; do kill -TERM "$pid" 2> /dev/null || true; done
+  for pid in "${!JOB_OUT[@]}" "${!FG_JOB[@]}"; do wait "$pid" 2> /dev/null || true; done
+  JOB_OUT=() FG_JOB=()
 }
 
 leftover_jobs() { # pids of training processes (of any earlier pipeline) writing into this root
@@ -323,7 +342,7 @@ EOF
 gen() { # split cell vehicles orders count seed
   local dir="$INST/$1/$2"
   if (($(count_json "$dir") >= $5)); then return; fi
-  "$BIN/gen_instances" --vehicles "$3" --orders "$4" --count "$5" --seed "$6" --out "$dir"
+  run_tracked "$BIN/gen_instances" --vehicles "$3" --orders "$4" --count "$5" --seed "$6" --out "$dir"
 }
 
 batch_data() {
@@ -342,7 +361,7 @@ batch_data() {
     seed=$([[ $split == train ]] && echo 1 || echo 100001)
     if [[ ! -f $LABELS/$split.jsonl ]]; then
       for cell in 10_20 20_50; do
-        [[ -f $LABELS/${split}_$cell.jsonl ]] || "$BIN/label" --cell "$INST/$split/$cell" --split "$split" \
+        [[ -f $LABELS/${split}_$cell.jsonl ]] || run_tracked "$BIN/label" --cell "$INST/$split/$cell" --split "$split" \
           --lns-iters "$LABEL_ITERS" --states "$LABEL_STATES" --m "$LABEL_M" --top-frac 0.1 --seed "$seed" \
           --schedule log --out "$LABELS/${split}_$cell.jsonl" --threads "$ITER_THREADS"
       done
@@ -353,7 +372,7 @@ batch_data() {
     fi
     expect file "$LABELS/$split.jsonl"
     expect file "$ROOT/label_stats/stats_$split.json"
-    [[ -f $ROOT/label_stats/stats_$split.json ]] || "$PY" -m vrppd_nn.label_stats --labels "$LABELS/$split.jsonl" \
+    [[ -f $ROOT/label_stats/stats_$split.json ]] || run_tracked "$PY" -m vrppd_nn.label_stats --labels "$LABELS/$split.jsonl" \
       --out "$ROOT/label_stats/stats_$split.json" --md "$ROOT/label_stats/stats_$split.md" > /dev/null
   done
 }
@@ -448,7 +467,7 @@ batch_v2() { # a | b | c | d | e
   esac
   mkdir -p "$out"
   # shellcheck disable=SC2086
-  "$PY" -m vrppd_nn.reinforce --train-instances-dir "$INST/train" --val-instances-dir "$INST/val" --out "$out" \
+  run_tracked "$PY" -m vrppd_nn.reinforce --train-instances-dir "$INST/train" --val-instances-dir "$INST/val" --out "$out" \
     --max-hours "$V2_MAX_HOURS" --seed 0 --device auto --resume "${args[@]}" $V2_EXTRA >> "$out/train.log" 2>&1 || {
     tail -5 "$out/train.log"
     die "V2 run $out failed"
@@ -470,7 +489,7 @@ batch_select() {
     done; done
   done
   expect file "$ROOT/selection/selection.json"
-  "$PY" -m vrppd_nn.aggregate3 select --root "$ROOT" --val-dir "$INST/val" "${margs[@]}"
+  run_tracked "$PY" -m vrppd_nn.aggregate3 select --root "$ROOT" --val-dir "$INST/val" "${margs[@]}"
 }
 
 batch_iters() { # cell
@@ -676,7 +695,14 @@ trap 'exit 143' TERM HUP
 
 log "pipeline start: root=$ROOT host=$HOST_NAME smoke=$SMOKE pid=$$ iter_threads=$ITER_THREADS timed_threads=$TIMED_THREADS taskset=$CPU_LIST"
 check_disk
-cargo build --release -p vrppd-lns 2>&1 | tail -1
+build_log=$(mktemp)
+run_tracked cargo build --release -p vrppd-lns > "$build_log" 2>&1 || {
+  cat "$build_log" >&2
+  rm -f "$build_log"
+  die "cargo build failed"
+}
+tail -1 "$build_log"
+rm -f "$build_log"
 
 if [[ -n $ONLY ]]; then
   QUEUE=("$ONLY")
@@ -696,4 +722,4 @@ for b in "${QUEUE[@]}"; do
   run_batch "$b"
 done
 log "queue finished"
-if [[ $SMOKE == 1 ]]; then "$PY" -m vrppd_nn.aggregate3 --root "$ROOT"; fi
+if [[ $SMOKE == 1 ]]; then run_tracked "$PY" -m vrppd_nn.aggregate3 --root "$ROOT"; fi
