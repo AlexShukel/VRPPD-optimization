@@ -36,6 +36,16 @@ pub fn parse_objective(name: &str) -> Result<Objective, String> {
   }
 }
 
+/// Deterministic hash of the problem's content (computed once per context).
+fn problem_fingerprint(problem: &Problem) -> u64 {
+  use std::hash::{Hash, Hasher};
+  let mut h = std::collections::hash_map::DefaultHasher::new();
+  serde_json::to_string(problem)
+    .unwrap_or_default()
+    .hash(&mut h);
+  h.finish()
+}
+
 /// Static per-instance data shared by all LNS components.
 pub struct Context<'a> {
   pub problem: &'a Problem,
@@ -52,6 +62,9 @@ pub struct Context<'a> {
   pub relatedness: Vec<f64>,
   /// Largest pairwise stop distance (used for normalisation).
   pub max_dist: f64,
+  /// Content hash of the problem (locations, loads, prices), so per-instance
+  /// caches can tell instances of the same shape apart.
+  pub fingerprint: u64,
 }
 
 impl<'a> Context<'a> {
@@ -109,6 +122,7 @@ impl<'a> Context<'a> {
       nearest_other,
       relatedness,
       max_dist,
+      fingerprint: problem_fingerprint(problem),
     }
   }
 

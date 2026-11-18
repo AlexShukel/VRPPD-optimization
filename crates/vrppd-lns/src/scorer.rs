@@ -11,7 +11,7 @@ use crate::solution::Context;
 
 pub trait Scorer {
   /// One score per order (problem order); higher = remove first. Scorers may
-  /// keep state between calls, so use one scorer per search run.
+  /// keep state between calls, so use one scorer per search run (it resets itself when it sees another instance).
   fn score(&mut self, ctx: &Context, sol: &WorkingSolution) -> Vec<f64>;
 
   /// Model family name as written in the weights file ("b0", ...).
@@ -23,7 +23,7 @@ pub trait Scorer {
 /// that changed since the last call are rescored.
 pub struct MlpScorer {
   mlp: Mlp,
-  shape: Option<(usize, usize)>,
+  instance: Option<u64>,
   cache: FeatureCache,
   scores: Vec<f64>,
   scratch_a: Vec<f64>,
@@ -34,7 +34,7 @@ impl MlpScorer {
   pub fn new(mlp: Mlp) -> Self {
     Self {
       mlp,
-      shape: None,
+      instance: None,
       cache: FeatureCache::empty(),
       scores: Vec::new(),
       scratch_a: Vec::new(),
@@ -46,11 +46,10 @@ impl MlpScorer {
 impl Scorer for MlpScorer {
   fn score(&mut self, ctx: &Context, sol: &WorkingSolution) -> Vec<f64> {
     let n = ctx.n_orders();
-    let shape = (n, ctx.n_vehicles());
-    // First call (or a scorer reused on another instance): start from scratch.
-    let full = self.shape != Some(shape);
+    // First call, or a scorer reused on another instance: start from scratch.
+    let full = self.instance != Some(ctx.fingerprint);
     if full {
-      self.shape = Some(shape);
+      self.instance = Some(ctx.fingerprint);
       self.cache = FeatureCache::new(ctx);
       self.scores = vec![0.0; n];
     }
@@ -104,6 +103,33 @@ mod tests {
   fn b0_weights_without_model_key_load() {
     let scorer = load_scorer(&fixture("mlp_fixture_weights.json")).unwrap();
     assert_eq!(scorer.model(), "b0");
+  }
+
+  #[test]
+  fn reused_scorer_matches_fresh_scorer_on_same_shape_instance() {
+    use crate::lns::initial_solution;
+    let load = |idx: usize| -> vrppd_core::Problem {
+      let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../problem-gen/problems/10_20");
+      let mut files: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .collect();
+      files.sort();
+      serde_json::from_str(&std::fs::read_to_string(&files[idx]).unwrap()).unwrap()
+    };
+    let (pa, pb) = (load(0), load(1));
+    assert_eq!(pa.orders.len(), pb.orders.len());
+    assert_eq!(pa.vehicles.len(), pb.vehicles.len());
+    let (ca, cb) = (Context::new(&pa), Context::new(&pb));
+    assert_ne!(ca.fingerprint, cb.fingerprint);
+    let (sa, sb) = (initial_solution(&ca, 1), initial_solution(&cb, 1));
+    let weights = fixture("mlp_fixture_weights.json");
+    let mut reused = load_scorer(&weights).unwrap();
+    reused.score(&ca, &sa);
+    let got = reused.score(&cb, &sb);
+    let fresh = load_scorer(&weights).unwrap().score(&cb, &sb);
+    assert_eq!(got, fresh);
   }
 
   #[test]

@@ -72,7 +72,7 @@ fn main() {
     .ok()
     .and_then(|t| serde_json::from_str(&t).ok())
     .unwrap_or_default();
-  let threads = args.threads.clamp(1, 6);
+  let threads = args.threads.clamp(1, 20);
   let objective = objective_name(args.objective);
   if let Some(other) = records.iter().find(|r| r.objective != objective) {
     eprintln!(

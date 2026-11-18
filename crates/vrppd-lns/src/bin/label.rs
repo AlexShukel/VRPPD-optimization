@@ -46,7 +46,7 @@ struct Args {
   out: PathBuf,
   #[arg(long)]
   max_instances: Option<usize>,
-  /// Worker threads (hard-capped at 6).
+  /// Worker threads (hard-capped at 20).
   #[arg(long, default_value_t = 6)]
   threads: usize,
 }
