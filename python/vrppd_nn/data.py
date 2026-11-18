@@ -44,7 +44,15 @@ def zscore(scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return z, mask
 
 
-def load_states(path: str, limit: int | None = None) -> list[State]:
+TARGET_FIELDS = {"mean": "scores", "top": "top_share"}
+
+
+def load_states(path: str, limit: int | None = None, target: str = "mean") -> list[State]:
+    """`target="mean"` z-scores `scores` (mean improvement); `target="top"` z-scores
+    `top_share` (absent from Stage 2 files). `State.scores` always holds the mean scores."""
+    if target not in TARGET_FIELDS:
+        raise ValueError(f"unknown target {target!r}; expected one of {sorted(TARGET_FIELDS)}")
+    field = TARGET_FIELDS[target]
     out: list[State] = []
     with open(path) as f:
         for line in f:
@@ -52,7 +60,14 @@ def load_states(path: str, limit: int | None = None) -> list[State]:
                 continue
             d = json.loads(line)
             scores = np.array([np.nan if s is None else s for s in d["scores"]], dtype=float)
-            z, mask = zscore(scores)
+            if field == "scores":
+                tgt = scores
+            else:
+                if field not in d:
+                    raise ValueError(f"{path}: label line has no '{field}' field, required for target={target!r} "
+                                     "(file predates this field; relabel it)")
+                tgt = np.array([np.nan if s is None else s for s in d[field]], dtype=float)
+            z, mask = zscore(tgt)
             out.append(State(
                 instance=d["instance"], cell=d["cell"], iteration=int(d["iteration"]), k=int(d["k"]),
                 features=np.asarray(d["features"], dtype=float), scores=scores, z=z, mask=mask,
@@ -63,6 +78,15 @@ def load_states(path: str, limit: int | None = None) -> list[State]:
             if limit and len(out) >= limit:
                 break
     return out
+
+
+def subsample_instances(states: list[State], n_instances: int, seed: int = 0) -> list[State]:
+    """Keep every state of `n_instances` instances. The instance order is one seeded
+    permutation of the sorted names, so smaller selections are prefixes (nested)."""
+    names = sorted({s.instance for s in states})
+    order = np.random.default_rng(seed).permutation(len(names))
+    keep = {names[i] for i in order[:n_instances]}
+    return [s for s in states if s.instance in keep]
 
 
 def feature_stats(states: list[State]) -> tuple[np.ndarray, np.ndarray]:
