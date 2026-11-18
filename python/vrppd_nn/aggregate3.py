@@ -403,11 +403,11 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
             continue
         w = _read_json(wpath)
         tc = w.get("train_config", {})
-        done = _read_json(os.path.join(vdir, "DONE")) if os.path.exists(os.path.join(vdir, "DONE")) else {}
+        finish = _read_json(os.path.join(vdir, "DONE")) if os.path.exists(os.path.join(vdir, "DONE")) else {}
         rows.append({"family": "v2", "group": "reinforce", "name": f"v2-{os.path.basename(vdir)}",
                      "params": int(sum(np.prod(p["shape"]) for p in w["params"].values())),
-                     "best_epoch": tc.get("episode"), "epochs_run": done.get("episode"),
-                     "train_seconds": 3600 * done["hours"] if "hours" in done else np.nan,
+                     "best_epoch": tc.get("episode"), "epochs_run": finish.get("episode"),
+                     "train_seconds": 3600 * finish["hours"] if "hours" in finish else np.nan,
                      "val_reward": tc.get("val_reward"), "init": tc.get("init"), "samples": tc.get("samples"),
                      "entropy_beta": tc.get("entropy_beta"), "dropout": tc.get("dropout"), "seed": tc.get("seed"),
                      "d": w["config"]["d"], "n_att": w["config"]["n_att"]})

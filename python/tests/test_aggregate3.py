@@ -312,3 +312,33 @@ def test_aggregate_refuses_wall_time_table_of_mixed_host_class(tmp_path):
         table = f.read()
     assert "10\\_20" in table and "10\\_10" not in table
     assert set(pd.read_csv(os.path.join(root, "summary.csv"))["cell"]) == {"10_20"}
+
+
+def write_v2_run(root, x, *, done=True):
+    d = os.path.join(root, "models", "v2", x)
+    write_json(os.path.join(d, "weights.json"), {
+        "model": "v1", "config": {"d": 16, "heads": 2, "n_att": 1, "ff_mult": 2},
+        "params": {"head.l2.weight": {"shape": [1, 16], "data": [0.0] * 16}},
+        "training": "reinforce",
+        "train_config": {"init": None if x == "b" else "models/v1/x/weights.json", "samples": 4, "entropy_beta": 0.01,
+                         "episode": 10, "val_reward": 0.5, "dropout": 0.1, "seed": 0}})
+    write_json(os.path.join(d, "DONE"), {"episode": 20, "hours": 0.5, "best_episode": 10, "best_val": 0.5})
+    with open(os.path.join(d, "train_log.csv"), "w") as f:
+        f.write("episode,hours,mean_reward,random_reward,entropy,loss\n1,0.1,1.0,0.5,2.0,0.1\n2,0.2,1.1,0.5,1.9,0.1\n")
+    with open(os.path.join(d, "val_log.csv"), "w") as f:
+        f.write("episode,hours,val_reward\n2,0.2,0.5\n")
+    if done:
+        write_batch(root, f"v2-{x}")
+
+
+def test_training_summary_keeps_every_finished_v2_run(tmp_path):
+    root = str(tmp_path)
+    for x in ("a", "b", "c"):
+        write_v2_run(root, x)
+    write_v2_run(root, "d", done=False)  # its batch has no DONE yet
+    done = {"v2-a", "v2-b", "v2-c"}
+    assert aggregate3.training_summary(root, done)["name"].tolist() == ["v2-a", "v2-b", "v2-c"]
+    aggregate3.main(["--root", root])
+    assert pd.read_csv(os.path.join(root, "training_summary.csv"))["name"].tolist() == ["v2-a", "v2-b", "v2-c"]
+    with open(os.path.join(root, "tables", "training_v2.tex")) as f:
+        assert [line.split(" & ")[0] for line in f.read().splitlines()] == ["v2-a", "v2-b", "v2-c"]
