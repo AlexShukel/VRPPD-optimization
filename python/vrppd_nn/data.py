@@ -7,6 +7,7 @@ of scores within a state matters. Orders never sampled (score null) are masked.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,16 +33,32 @@ class State:
     in_best: np.ndarray  # (n,) bool
     try_improvements: np.ndarray  # (M,)
     objective: float
+    split: str = ""
+    # per vehicle: (order index, "pickup" | "delivery"); the label file's order ids
+    # mapped to indices through order_ids. None for lines without routes.
+    routes: list[list[tuple[int, str]]] | None = None
+    order_ids: np.ndarray | None = None  # (n,) order id of each row
 
 
 def zscore(scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Per-state z-scores of the finite entries; exactly 0 when their spread is below 1e-12."""
     mask = np.isfinite(scores)
     z = np.zeros_like(scores)
     if mask.sum() >= 2:
         s = scores[mask]
         std = s.std()
-        z[mask] = (s - s.mean()) / (std if std > 1e-12 else 1.0)
+        if std > 1e-12:
+            z[mask] = (s - s.mean()) / std
     return z, mask
+
+
+def route_indices(routes: list[list[list]], order_ids: list[int]) -> list[list[tuple[int, str]]]:
+    """Label routes hold (order id, kind); map the ids to row indices (position in order_ids)."""
+    index = {oid: i for i, oid in enumerate(order_ids)}
+    try:
+        return [[(index[oid], sys.intern(kind)) for oid, kind in r] for r in routes]
+    except KeyError as e:
+        raise ValueError(f"route stop has order id {e.args[0]} that is not in order_ids") from None
 
 
 TARGET_FIELDS = {"mean": "scores", "top": "top_share"}
@@ -68,12 +85,17 @@ def load_states(path: str, limit: int | None = None, target: str = "mean") -> li
                                      "(file predates this field; relabel it)")
                 tgt = np.array([np.nan if s is None else s for s in d[field]], dtype=float)
             z, mask = zscore(tgt)
+            routes = order_ids = None
+            if "routes" in d and "order_ids" in d:
+                routes = route_indices(d["routes"], d["order_ids"])
+                order_ids = np.asarray(d["order_ids"], dtype=np.int64)
             out.append(State(
                 instance=d["instance"], cell=d["cell"], iteration=int(d["iteration"]), k=int(d["k"]),
                 features=np.asarray(d["features"], dtype=float), scores=scores, z=z, mask=mask,
                 in_best=np.asarray(d["in_best"], dtype=bool),
                 try_improvements=np.asarray(d["try_improvements"], dtype=float),
                 objective=float(d["objective"]),
+                split=d.get("split", ""), routes=routes, order_ids=order_ids,
             ))
             if limit and len(out) >= limit:
                 break

@@ -1,8 +1,9 @@
 import json
+import os
 
 import numpy as np
 
-from vrppd_nn import train
+from vrppd_nn import fileio, train
 from vrppd_nn.model import forward_numpy
 
 
@@ -41,3 +42,19 @@ def test_select_by_is_recorded_and_epoch_stays_on_val_loss(tmp_path, write_label
     curve = met["val_loss_curve"]
     assert met["best_epoch"] == int(np.argmin(curve)) + 1
     assert met["best_val_loss"] == min(curve)
+
+
+def test_every_output_is_written_as_tmp_then_renamed(tmp_path, write_labels, monkeypatch):
+    renames = []
+    real_replace = os.replace
+
+    def record(src, dst):
+        renames.append((str(src), str(dst)))
+        real_replace(src, dst)
+
+    monkeypatch.setattr(fileio.os, "replace", record)
+    out = run(tmp_path, write_labels)
+    files = sorted(os.listdir(out))
+    assert files == ["config.json", "loss_curve.csv", "metrics.json", "val_predictions.jsonl", "weights.json"]
+    assert sorted(renames) == sorted((str(out / f) + ".tmp", str(out / f)) for f in files)
+    assert renames[-1][1].endswith("metrics.json")  # written last: its presence marks a finished run

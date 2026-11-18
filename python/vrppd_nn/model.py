@@ -2,12 +2,13 @@
 with the Rust forward pass in crates/vrppd-lns/src/mlp.rs."""
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import numpy as np
 import torch
 from torch import nn
+
+from vrppd_nn.fileio import write_json_atomic
 
 
 class B0(nn.Module):
@@ -52,8 +53,7 @@ def model_to_json(model: B0, mean: np.ndarray, std: np.ndarray, extra: dict[str,
 
 
 def save_json(model: B0, mean: np.ndarray, std: np.ndarray, path: str, extra: dict[str, Any] | None = None) -> None:
-    with open(path, "w") as f:
-        json.dump(model_to_json(model, mean, std, extra), f)
+    write_json_atomic(path, model_to_json(model, mean, std, extra))
 
 
 def forward_numpy(weights: dict[str, Any], raw: np.ndarray) -> np.ndarray:

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from vrppd_nn.data import load_states, subsample_instances
+from vrppd_nn.data import load_states, subsample_instances, zscore
 
 
 def test_subsample_is_nested_and_deterministic(write_labels):
@@ -38,3 +38,10 @@ def test_zero_spread_state_gives_zero_targets(write_labels):
     assert len(states) == 3
     assert np.all(states[0].z == 0.0)
     assert states[1].z.std() > 0
+
+
+def test_tiny_spread_gives_exactly_zero():
+    # the mean of three 0.1 is not exactly 0.1, so (s - mean) is about 1e-17, not 0
+    z, mask = zscore(np.array([0.1, 0.1, 0.1, np.nan]))
+    assert mask.tolist() == [True, True, True, False]
+    assert np.all(z == 0.0)
