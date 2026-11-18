@@ -34,8 +34,9 @@ build of torch. The test instances (`problem-gen/problems/`) and the generator p
 
 One host file per machine, `scripts/stage3/hosts/<name>.env`, sets the CPU list and
 thread counts. From the Mac, `scripts/stage3/remote.sh bootstrap` prepares the host
-(clone, venv, build, tests) and `remote.sh run stage3 'scripts/stage3/run_all.sh'`
-starts the experiment there. The experiment is a queue of resumable batches
+(clone, venv, build, tests) and
+`remote.sh run stage3 'scripts/stage3/run_all.sh >> results/stage3/pipeline.log 2>&1'`
+starts the experiment there (`remote.sh status` shows that log). The experiment is a queue of resumable batches
 (`run_all.sh --list`); restarting it skips finished work, `remote.sh pull` copies
 finished batches back and `remote.sh watch` restarts the queue after a reboot. On a
 single machine: `STAGE3_HOST=<name> scripts/stage3/run_all.sh`.
