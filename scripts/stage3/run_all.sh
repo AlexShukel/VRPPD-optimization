@@ -17,7 +17,9 @@
 # a host, so a new host regenerates `data` from the seeds). Inside a batch every existing output
 # is skipped: run files, reference records, models with metrics.json, V2 runs with DONE (V2 runs
 # always resume). A batch writes batches/<batch>/manifest.json, then DONE, only after checking that
-# every output it registered is complete (run files per directory, reference records, finish markers).
+# every output it registered is complete (run files per directory, reference records, finish markers)
+# and that git HEAD did not move while it ran; the manifest records the commit at batch start.
+# The queue builds the binaries and the Python binding (vrppd_py) once, at its start.
 # Iteration-budget runs use ITER_THREADS. Wall-time work (60 s runs, CEA references) runs under
 # `taskset -c $TIMED_CPUS` with TIMED_THREADS. A wall-time batch started on another host is refused,
 # and so are wall-time runs whose class's CEA references (or earlier runs) come from another
@@ -139,6 +141,10 @@ cpu_model() {
   else sysctl -n machdep.cpu.brand_string 2> /dev/null || echo unknown; fi
 }
 git_commit() { echo "$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . 2> /dev/null || echo -dirty)"; }
+destroy_k() { # orders fraction -> destroy size of lns (k_for): max(3, round(fraction * orders)), at most orders
+  awk -v n="$1" -v f="$2" 'BEGIN { x = f * n; k = int(x); if (x - k >= 0.5) k++
+    if (k < 3) k = 3; m = n > 1 ? n : 1; if (k > m) k = m; print k }'
+}
 check_disk() {
   local gb
   gb=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
@@ -214,9 +220,9 @@ run_lns() { # out iters|timed lns-args (with --max-instances, optionally --repea
   RUNS=$((RUNS + $(count_json "$out")))
 }
 
-run_ref() { # out cell runs instances objective
+run_ref() { # out cell runs instances objective; cea_ref sizes the CEA's pool, RAYON_NUM_THREADS guards it too
   expect refs "$1" "$4" "$3"
-  run_tracked "${PIN[@]}" "$BIN/cea_ref" --cell "$2" --objective "$5" --runs "$3" --seconds "$REF_SECONDS" --threads "$TIMED_THREADS" \
+  RAYON_NUM_THREADS=$TIMED_THREADS run_tracked "${PIN[@]}" "$BIN/cea_ref" --cell "$2" --objective "$5" --runs "$3" --seconds "$REF_SECONDS" --threads "$TIMED_THREADS" \
     --max-instances "$4" --out "$1" --host-tag "$HOST_NAME" --cpu-list "$CPU_LIST"
   RUNS=$((RUNS + $("$PY" -c 'import json, sys; print(len(json.load(open(sys.argv[1]))))' "$1")))
 }
@@ -516,14 +522,25 @@ batch_ref() { # cell; a resumed reference file must not mix setups either
   check_timed_setup "$REFS/cea_ref_$1.json"
 }
 
-batch_ksweep() {
-  local k op cell best
+batch_ksweep() { # a fraction that gives a class the same k as an earlier fraction would repeat its runs: skipped
+  local frac op cell best k
+  local -A first=() skip=() # first["<cell> <k>"] = the fraction that runs that k
   best=$(sel best_model.operator)
-  for k in $KFRACS; do for op in random adaptive "$best"; do
+  for frac in $KFRACS; do for cell in $TEST_CELLS; do
+    k=$(destroy_k "${cell#*_}" "$frac") # class <vehicles>_<orders>
+    if [[ -n ${first["$cell $k"]:-} ]]; then
+      skip["$cell $frac"]=1
+      log "ksweep: skip fraction $frac on $cell (k = $k, as fraction ${first["$cell $k"]})"
+    else
+      first["$cell $k"]=$frac
+    fi
+  done; done
+  for frac in $KFRACS; do for op in random adaptive "$best"; do
     op_args "$op"
     for cell in $TEST_CELLS; do
-      run_lns "$LNS/ksweep-k$k/$op/$cell" iters --cell "$cell" --max-instances "$TEST_INST" --repeats "$REPEATS" \
-        --iters "$ITERS" --log-every 0 --k-frac "$k" "${OP_ARGS[@]}"
+      [[ -z ${skip["$cell $frac"]:-} ]] || continue
+      run_lns "$LNS/ksweep-k$frac/$op/$cell" iters --cell "$cell" --max-instances "$TEST_INST" --repeats "$REPEATS" \
+        --iters "$ITERS" --log-every 0 --k-frac "$frac" "${OP_ARGS[@]}"
     done
   done; done
 }
@@ -629,7 +646,8 @@ run_batch() {
     echo "$HOST_NAME $(date '+%FT%T')" > "$d/STARTED"
   fi
   BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=() FAILED=() NOT_STARTED=0 JOBS=1
-  log "=== batch $b: start"
+  BATCH_HEAD=$(git rev-parse HEAD) BATCH_COMMIT=$(git_commit)
+  log "=== batch $b: start (commit $BATCH_COMMIT)"
   case $b in
     data) batch_data ;;
     b0) batch_b0 ;;
@@ -644,8 +662,11 @@ run_batch() {
     obj-*) batch_obj "${b#obj-}" ;;
   esac
   verify_outputs
+  local head
+  head=$(git rev-parse HEAD)
+  [[ $head == "$BATCH_HEAD" ]] || die "git HEAD moved during batch $b (${BATCH_HEAD:0:7} at its start, ${head:0:7} now): its outputs may come from two code versions; DONE not written"
   "$PY" - "$d/manifest.json" "$b" "$HOST_NAME" "$(cpu_model)" "$TIMED_CPUS" "$ITER_THREADS" "$TIMED_THREADS" \
-    "$(git_commit)" "$BATCH_T0" "$(date '+%FT%T')" "$RUNS" "$SMOKE" "$B0_JOBS" "$V1_JOBS" << 'EOF'
+    "$BATCH_COMMIT" "$BATCH_T0" "$(date '+%FT%T')" "$RUNS" "$SMOKE" "$B0_JOBS" "$V1_JOBS" << 'EOF'
 import json, os, sys
 path, batch, host, cpu, taskset, it, tt, commit, start, end, runs, smoke, b0_jobs, v1_jobs = sys.argv[1:]
 # train_jobs: training processes run at once (train_seconds of those models include the contention)
@@ -693,15 +714,27 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 
-log "pipeline start: root=$ROOT host=$HOST_NAME smoke=$SMOKE pid=$$ iter_threads=$ITER_THREADS timed_threads=$TIMED_THREADS taskset=$CPU_LIST"
+log "pipeline start: root=$ROOT host=$HOST_NAME smoke=$SMOKE pid=$$ commit=$(git_commit) iter_threads=$ITER_THREADS timed_threads=$TIMED_THREADS taskset=$CPU_LIST"
 check_disk
 build_log=$(mktemp)
-run_tracked cargo build --release -p vrppd-lns > "$build_log" 2>&1 || {
-  cat "$build_log" >&2
-  rm -f "$build_log"
-  die "cargo build failed"
+build() { # what command...: run tracked, output in build_log; its last line on success
+  local what=$1
+  shift
+  run_tracked "$@" > "$build_log" 2>&1 || {
+    cat "$build_log" >&2
+    rm -f "$build_log"
+    die "$what failed"
+  }
+  tail -1 "$build_log"
 }
-tail -1 "$build_log"
+build "cargo build" cargo build --release -p vrppd-lns
+if [[ ! -d crates/vrppd-py ]]; then
+  log "no crates/vrppd-py: the Python binding is not rebuilt"
+elif [[ ! -x $REPO/.venv/bin/maturin ]]; then
+  log "no maturin in .venv: the Python binding (vrppd_py) is not rebuilt"
+else
+  VIRTUAL_ENV="$REPO/.venv" build "maturin develop" "$REPO/.venv/bin/maturin" develop --release -m crates/vrppd-py/Cargo.toml
+fi
 rm -f "$build_log"
 
 if [[ -n $ONLY ]]; then
