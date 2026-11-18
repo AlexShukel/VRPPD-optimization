@@ -20,7 +20,7 @@ struct Args {
   /// Thesis cell name (e.g. 10_20) or a directory of instance JSON files.
   #[arg(long)]
   cell: String,
-  /// Destroy operator: random | worst | related | adaptive | neural.
+  /// Destroy operator: random | worst | related | adaptive | neural | adaptive_n.
   #[arg(long, default_value = "random")]
   operator: String,
   /// Objective to minimise: distance | price | empty.
@@ -35,9 +35,12 @@ struct Args {
   /// Base seed; run r on instance i uses seed = seed + 1000*i + r.
   #[arg(long, default_value_t = 1)]
   seed: u64,
-  /// Destroy size (0 = 15 % of orders, min 3).
+  /// Destroy size (0 = use --k-frac; wins over --k-frac when set).
   #[arg(long, default_value_t = 0)]
   k: usize,
+  /// Destroy size as a fraction of the orders (min 3; default 0.15).
+  #[arg(long)]
+  k_frac: Option<f64>,
   #[arg(long, default_value_t = 1)]
   repeats: usize,
   /// Output directory (files: <out>/<instance>_s<seed>.json and .curve.csv).
@@ -61,7 +64,7 @@ struct Args {
   /// Only the first N instances of the cell.
   #[arg(long)]
   max_instances: Option<usize>,
-  /// Worker threads (hard-capped at 6).
+  /// Worker threads (hard-capped at 20).
   #[arg(long, default_value_t = 6)]
   threads: usize,
   /// Re-run even if the result file already exists (default: skip existing).
@@ -84,7 +87,7 @@ struct RunFile<'a> {
 
 fn main() {
   let args = Args::parse();
-  let threads = init_threads(args.threads, 6);
+  let threads = init_threads(args.threads, 20);
   let dir = resolve_cell_dir(&args.cell);
   let cell = cell_name(&dir);
   let instances = load_instances(&dir, args.max_instances).unwrap_or_else(|e| {
@@ -116,6 +119,7 @@ fn main() {
       None
     },
     k: if args.k > 0 { Some(args.k) } else { None },
+    k_frac: args.k_frac,
     log_every: args.log_every,
     log_every_ms: args.log_every_ms,
     ..Default::default()

@@ -19,8 +19,13 @@ pub struct LnsConfig {
   /// Wall-time budget in seconds (None = unlimited).
   pub max_secs: Option<f64>,
   pub seed: u64,
-  /// Number of orders removed per iteration. None = 15 % of orders, min 3.
+  /// Number of orders removed per iteration. None = `k_frac` of the orders, or
+  /// 15 % if that is None too (min 3).
   pub k: Option<usize>,
+  /// Destroy size as a fraction of the orders (see [`k_for`]); used when `k`
+  /// is None.
+  #[serde(default)]
+  pub k_frac: Option<f64>,
   /// SA: a solution `start_temp_control` (fraction) worse than the initial one
   /// is accepted with probability 0.5 at the start.
   pub start_temp_control: f64,
@@ -39,6 +44,7 @@ impl Default for LnsConfig {
       max_secs: None,
       seed: 0,
       k: None,
+      k_frac: None,
       start_temp_control: 0.05,
       end_temp_ratio: 0.002,
       log_every: 100,
@@ -47,10 +53,16 @@ impl Default for LnsConfig {
   }
 }
 
-pub fn default_k(n_orders: usize) -> usize {
-  ((0.15 * n_orders as f64).round() as usize)
+/// Destroy size for a fraction of the orders: `max(3, round(frac * n))`,
+/// capped at `n`.
+pub fn k_for(n_orders: usize, frac: f64) -> usize {
+  ((frac * n_orders as f64).round() as usize)
     .max(3)
     .min(n_orders.max(1))
+}
+
+pub fn default_k(n_orders: usize) -> usize {
+  k_for(n_orders, 0.15)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -120,7 +132,10 @@ pub fn run_lns(
 ) -> LnsResult {
   let mut rng = Xoshiro256StarStar::seed_from_u64(cfg.seed);
   let n = ctx.n_orders();
-  let k = cfg.k.unwrap_or_else(|| default_k(n)).min(n.max(1));
+  let k = cfg
+    .k
+    .unwrap_or_else(|| k_for(n, cfg.k_frac.unwrap_or(0.15)))
+    .min(n.max(1));
 
   let started = Instant::now();
   let mut current = initial;
@@ -311,7 +326,10 @@ mod tests {
   fn classical_operators_improve_and_stay_valid() {
     let problem = load_problem("10_20", 0);
     let ctx = Context::new(&problem);
-    for name in OPERATOR_NAMES.iter().filter(|n| **n != "neural") {
+    for name in OPERATOR_NAMES
+      .iter()
+      .filter(|n| !matches!(**n, "neural" | "adaptive_n"))
+    {
       let mut op = build_operator(name, None, 0.0, 3.0).unwrap();
       let cfg = LnsConfig {
         max_iters: Some(300),
@@ -484,6 +502,33 @@ mod tests {
     let old: LnsResult = serde_json::from_value(json).unwrap();
     assert_eq!(old.objective, "distance");
     assert!(old.best_distance.is_nan() && old.best_price.is_nan() && old.best_empty.is_nan());
+  }
+
+  #[test]
+  fn k_for_examples() {
+    assert_eq!(k_for(20, 0.25), 5);
+    assert_eq!(k_for(10, 0.05), 3);
+    assert_eq!(k_for(50, 0.15), default_k(50));
+    assert_eq!(k_for(2, 0.5), 2);
+  }
+
+  #[test]
+  fn k_frac_sets_destroy_size_and_k_wins() {
+    let problem = load_problem("10_20", 0);
+    let ctx = Context::new(&problem);
+    let run = |k: Option<usize>, k_frac: Option<f64>| {
+      let mut op = build_operator("random", None, 0.0, 3.0).unwrap();
+      let cfg = LnsConfig {
+        max_iters: Some(5),
+        k,
+        k_frac,
+        ..Default::default()
+      };
+      run_lns(&ctx, initial_solution(&ctx, 1), op.as_mut(), &cfg, None).k
+    };
+    assert_eq!(run(None, Some(0.5)), 10);
+    assert_eq!(run(Some(4), Some(0.5)), 4);
+    assert_eq!(run(None, None), default_k(20));
   }
 
   #[test]

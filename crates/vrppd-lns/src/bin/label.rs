@@ -53,7 +53,7 @@ struct Args {
 
 fn main() {
   let args = Args::parse();
-  let threads = init_threads(args.threads, 6);
+  let threads = init_threads(args.threads, 20);
   let dir = resolve_cell_dir(&args.cell);
   let cell = cell_name(&dir);
   let instances = load_instances(&dir, args.max_instances).unwrap_or_else(|e| {
