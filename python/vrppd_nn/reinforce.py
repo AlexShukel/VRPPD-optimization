@@ -4,7 +4,7 @@ Usage:
   python -m vrppd_nn.reinforce --train-instances-dir results/stage3/instances/train \
       --val-instances-dir results/stage3/instances/val --out results/stage3/models/v2_a \
       --init results/stage3/models/v1/weights.json --samples 4 --entropy-beta 0.01 \
-      --batch-envs 32 --horizon 200 --lr 1e-4 --max-hours 3 --seed 0 --d 64 --n-att 2 --resume
+      --batch-envs 32 --horizon 200 --lr 1e-4 --max-hours 3 --seed 0 --resume
 
 The policy of an environment is softmax(scores) over its orders; a removal set is
 k orders drawn from it without replacement. An episode takes --batch-envs instance
@@ -18,11 +18,16 @@ the gradient norm clipped to 1; then BatchEnv.step with each environment's first
 policy set. With one sample per state the baseline is a moving average of the batch
 mean reward (decay 0.95), carried across iterations, episodes and resumes.
 
-Validation runs every 10 episodes and after the last one: one episode on the first
-32 files (sorted by path) under --val-instances-dir, environment and sampling seed
-fixed, model in eval mode; its score is the mean reward of the sets the search steps
-with. Token statistics come from --init, or from the training instances when
-training from scratch.
+Validation runs every 10 episodes and after the last one: one episode on a fixed list
+of 32 validation instances (see validation_paths: every cell subdirectory contributes
+equally), environment and sampling seed fixed, model in eval mode; its score is the
+mean reward of the sets the search steps with.
+
+With --init, the token statistics and the architecture come from that V1 weights
+file: --d/--heads/--n-att default to its config (an explicit value that differs is
+an error) and --dropout to its train_config.dropout (0.1 if it has none); an
+explicit --dropout wins. From scratch the defaults are d 64, 4 heads, n_att 2,
+dropout 0.1, and the token statistics come from the training instances.
 
 Writes to --out, every file as *.tmp then renamed:
   train_log.csv  per episode: episode, hours, mean_reward, random_reward, entropy, loss
@@ -55,6 +60,8 @@ from vrppd_nn.train import resolve_device
 VAL_EVERY = 10  # episodes between validations
 N_VAL = 32  # validation instances
 VAL_SEED = 1  # environment and sampling seed of every validation episode, the same in every run
+ARCH_DEFAULTS = {"d": 64, "heads": 4, "n_att": 2}  # without --init
+DEFAULT_DROPOUT = 0.1
 EMA_DECAY = 0.95  # moving-average baseline when there is one sample per state
 CLIP_NORM = 1.0
 TRAIN_LOG_HEADER = "episode,hours,mean_reward,random_reward,entropy,loss"
@@ -225,6 +232,49 @@ def list_instances(directory: str) -> list[str]:
     return paths
 
 
+def validation_paths(directory: str, n: int = N_VAL) -> list[str]:
+    """The fixed validation list. When `directory` has cell subdirectories (holding
+    *.json files), the first n // (number of cells) files (sorted by name) of each
+    cell, cells in sorted order; otherwise the first n files (sorted by name)."""
+    cells = sorted(e.path for e in os.scandir(directory)
+                   if e.is_dir() and glob.glob(os.path.join(glob.escape(e.path), "*.json")))
+    if cells:
+        per_cell = n // len(cells)
+        paths = [p for cell in cells for p in sorted(glob.glob(os.path.join(glob.escape(cell), "*.json")))[:per_cell]]
+    else:
+        paths = sorted(glob.glob(os.path.join(glob.escape(directory), "*.json")))[:n]
+    if not paths:
+        raise SystemExit(f"no validation instances under {directory} ({len(cells)} cells for {n} instances)")
+    return paths
+
+
+def resolve_architecture(args: argparse.Namespace) -> int:
+    """Fill args.d / heads / n_att / dropout left unset on the command line (see the
+    module docstring) and return the feed-forward multiplier (the init file's, else 2)."""
+    arch, dropout, ff_mult = dict(ARCH_DEFAULTS), DEFAULT_DROPOUT, 2
+    if args.init:
+        with open(args.init) as f:
+            w = json.load(f)
+        if w.get("model") != "v1":
+            raise SystemExit(f"--init {args.init}: not a V1 weights file (model={w.get('model')!r})")
+        cfg = w["config"]
+        for key in arch:
+            given = getattr(args, key)
+            if given is not None and given != cfg[key]:
+                raise SystemExit(f"--{key.replace('_', '-')} {given} contradicts --init {args.init} ({key} = {cfg[key]})")
+            arch[key] = cfg[key]
+        ff_mult = cfg["ff_mult"]
+        recorded = (w.get("train_config") or {}).get("dropout")
+        if recorded is not None:
+            dropout = recorded
+    for key, value in arch.items():
+        if getattr(args, key) is None:
+            setattr(args, key, value)
+    if args.dropout is None:
+        args.dropout = dropout
+    return ff_mult
+
+
 def read_instance(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
@@ -263,7 +313,7 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
     """`make_env(paths, seed, horizon=, threads=)` builds the environments; vrppd_py.BatchEnv by default."""
     ap = argparse.ArgumentParser(description="Train the V1 encoder against the search with REINFORCE (V2).")
     ap.add_argument("--train-instances-dir", required=True)
-    ap.add_argument("--val-instances-dir", required=True, help="the first 32 files (sorted by path) are used")
+    ap.add_argument("--val-instances-dir", required=True, help="32 files, spread evenly over its cell subdirectories")
     ap.add_argument("--out", required=True)
     ap.add_argument("--init", default=None, help="start from these V1 weights (weights.json) and their token statistics")
     ap.add_argument("--samples", type=int, default=4, help="policy samples per state")
@@ -274,15 +324,18 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
     ap.add_argument("--max-hours", type=float, default=3.0, help="checked between episodes, summed over resumes")
     ap.add_argument("--max-episodes", type=int, default=None, help="stop after this episode (smoke runs, tests)")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--d", type=int, default=64, help="embedding size")
-    ap.add_argument("--heads", type=int, default=4)
-    ap.add_argument("--n-att", type=int, default=2, help="attention blocks before and after the route layers")
-    ap.add_argument("--dropout", type=float, default=0.1)
+    ap.add_argument("--d", type=int, default=None, help="embedding size (default: --init's, else 64)")
+    ap.add_argument("--heads", type=int, default=None, help="default: --init's, else 4")
+    ap.add_argument("--n-att", type=int, default=None,
+                    help="attention blocks before and after the route layers (default: --init's, else 2)")
+    ap.add_argument("--dropout", type=float, default=None,
+                    help="default: --init's train_config.dropout, else 0.1; an explicit value wins")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     ap.add_argument("--resume", action="store_true", help="continue from OUT/checkpoint.pt if it exists")
     args = ap.parse_args(argv)
     if args.samples < 1 or args.horizon < 1:
         raise SystemExit("--samples and --horizon must be at least 1")
+    ff_mult = resolve_architecture(args)
     if make_env is None:
         import vrppd_py  # imported here so that the pure functions work without the binding
         make_env = vrppd_py.BatchEnv
@@ -298,21 +351,19 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
     if os.path.exists(done_path):
         os.remove(done_path)
     train_paths = list_instances(args.train_instances_dir)
-    val_paths = list_instances(args.val_instances_dir)[:N_VAL]
+    val_paths = validation_paths(args.val_instances_dir)
     val_instances = [read_instance(p) for p in val_paths]
     device = resolve_device(args.device)
 
     torch.manual_seed(args.seed)
-    model = V1Encoder(d=args.d, heads=args.heads, n_att=args.n_att, dropout=args.dropout)
+    model = V1Encoder(d=args.d, heads=args.heads, n_att=args.n_att, ff_mult=ff_mult, dropout=args.dropout)
     ck = torch.load(ck_path, map_location="cpu") if args.resume and os.path.exists(ck_path) else None
     if ck is not None:
         model.load_state_dict(ck["model"])
         tok_mean, tok_std = np.asarray(ck["tok_mean"]), np.asarray(ck["tok_std"])
     elif args.init:
         init, tok_mean, tok_std = load_json(args.init)
-        if init.config() != model.config():
-            raise SystemExit(f"--init {args.init} has config {init.config()}; pass matching --d/--heads/--n-att")
-        model.load_state_dict(init.state_dict())
+        model.load_state_dict(init.state_dict())  # same config: resolve_architecture took it from the file
     else:
         tok_mean, tok_std = stats_of_tokens([instance_tokens(read_instance(p)) for p in train_paths])
     model.to(device).train()

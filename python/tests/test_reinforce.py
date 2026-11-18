@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from vrppd_nn import reinforce
-from vrppd_nn.encoder import load_json
+from vrppd_nn.encoder import V1Encoder, export_json, load_json
 from vrppd_nn.reinforce import (first_pick_entropy, reinforce_loss, sample_sets, sequence_logprob,
                                 train_iteration)
 
@@ -228,6 +228,69 @@ def test_refuses_to_overwrite_without_resume(tmp_path, stub_dirs):
     reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "1"), make_env=StubEnv)
     with pytest.raises(SystemExit):
         reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "1"), make_env=StubEnv)
+
+
+def test_validation_list_covers_every_cell(tmp_path):
+    for cell in ("10_20", "20_50"):
+        (tmp_path / "nested" / cell).mkdir(parents=True)
+        for i in range(20):
+            (tmp_path / "nested" / cell / f"{i}.json").write_text("{}")
+    paths = reinforce.validation_paths(str(tmp_path / "nested"))
+    assert paths == reinforce.validation_paths(str(tmp_path / "nested"))
+    cells = [Path(p).parent.name for p in paths]
+    assert cells == ["10_20"] * 16 + ["20_50"] * 16  # 32 // 2 per cell, cells in sorted order
+    names = sorted(f"{i}.json" for i in range(20))[:16]
+    assert [Path(p).name for p in paths] == names * 2
+    (tmp_path / "flat").mkdir()
+    for i in range(40):
+        (tmp_path / "flat" / f"{i}.json").write_text("{}")
+    assert [Path(p).name for p in reinforce.validation_paths(str(tmp_path / "flat"))] == \
+        sorted(f"{i}.json" for i in range(40))[:32]
+
+
+class RecordingEnv(StubEnv):
+    built = []
+
+    def __init__(self, paths, seed, **kwargs):
+        RecordingEnv.built.append(list(paths))
+        super().__init__(paths, seed, **kwargs)
+
+
+def test_main_validates_on_every_cell(tmp_path, stub_dirs):
+    rng = np.random.default_rng(1)
+    val = tmp_path / "val_nested"
+    for cell, count in (("a", 33), ("b", 2)):  # the first 32 paths would all be in cell a
+        (val / cell).mkdir(parents=True)
+        for i in range(count):
+            (val / cell / f"{i}.json").write_text(json.dumps(make_instance(rng, 2, 3)))
+    RecordingEnv.built = []
+    reinforce.main(stub_args([stub_dirs[0], str(val)], tmp_path / "out", "--max-episodes", "1"), make_env=RecordingEnv)
+    (val_env,) = [paths for paths in RecordingEnv.built if str(val) in paths[0]]
+    assert val_env == reinforce.validation_paths(str(val))
+    assert sorted({Path(p).parent.name for p in val_env}) == ["a", "b"] and len(val_env) == 18
+
+
+def test_init_sets_architecture_and_dropout(tmp_path, stub_dirs):
+    torch.manual_seed(0)
+    init = tmp_path / "v1.json"
+    export_json(V1Encoder(d=16, heads=2, n_att=1), np.zeros(4), np.ones(4), str(init),
+                extra={"train_config": {"dropout": 0.0}})
+    bare = tmp_path / "v1_bare.json"
+    export_json(V1Encoder(d=16, heads=2, n_att=1), np.zeros(4), np.ones(4), str(bare))
+
+    def run(out, init_path, *extra):
+        reinforce.main(["--train-instances-dir", stub_dirs[0], "--val-instances-dir", stub_dirs[1],
+                        "--out", str(tmp_path / out), "--init", str(init_path), "--batch-envs", "2", "--horizon", "2",
+                        "--max-episodes", "1", "--device", "cpu", *extra], make_env=StubEnv)
+        args = torch.load(tmp_path / out / "checkpoint.pt")["args"]
+        return args["dropout"], (args["d"], args["heads"], args["n_att"])
+
+    assert run("from_init", init) == (0.0, (16, 2, 1))
+    assert json.loads((tmp_path / "from_init" / "weights.json").read_text())["train_config"]["dropout"] == 0.0
+    assert run("explicit", init, "--dropout", "0.3", "--d", "16") == (0.3, (16, 2, 1))
+    assert run("no_train_config", bare) == (0.1, (16, 2, 1))
+    with pytest.raises(SystemExit):
+        run("contradicts", init, "--d", "32")
 
 
 def test_real_env_two_episodes(tmp_path):
