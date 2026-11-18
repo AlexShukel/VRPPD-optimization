@@ -1,5 +1,6 @@
 //! LNS driver: destroy (pluggable) -> greedy cheapest-insertion repair ->
 //! simulated-annealing acceptance, with iteration and wall-time budgets.
+//! Repair and acceptance minimise the context's objective.
 
 use std::time::Instant;
 
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use vrppd_core::{Objective, StopKind, WorkingSolution};
 
 use crate::destroy::{DestroyOperator, Outcome};
-use crate::solution::{Context, destroy, repair_greedy, stop_lists};
+use crate::solution::{Context, destroy, objective_name, repair_greedy, stop_lists};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LnsConfig {
@@ -61,13 +62,34 @@ pub struct CurveRow {
   pub accepted: bool,
 }
 
+fn distance_name() -> String {
+  objective_name(Objective::Distance).to_string()
+}
+
+fn not_recorded() -> f64 {
+  f64::NAN
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LnsResult {
   pub operator: String,
+  /// Objective minimised: "distance", "price" or "empty". `initial`, `best`,
+  /// `final_current` and the curve are in this objective. Files written
+  /// before the field existed are distance runs.
+  #[serde(default = "distance_name")]
+  pub objective: String,
   pub seed: u64,
   pub k: usize,
   pub initial: f64,
   pub best: f64,
+  /// All three objectives of the best solution (NaN when read from a file
+  /// written before these fields existed).
+  #[serde(default = "not_recorded")]
+  pub best_distance: f64,
+  #[serde(default = "not_recorded")]
+  pub best_price: f64,
+  #[serde(default = "not_recorded")]
+  pub best_empty: f64,
   pub final_current: f64,
   pub iterations: u64,
   pub elapsed_ms: f64,
@@ -85,8 +107,8 @@ pub struct LnsResult {
   pub valid: bool,
 }
 
-/// Hook called after each iteration with the current solution (used for
-/// snapshotting search states during label generation).
+/// Hook called after each iteration with the current solution and its
+/// objective value (used for snapshotting search states during label generation).
 pub type IterHook<'h> = dyn FnMut(u64, &WorkingSolution, f64) + 'h;
 
 pub fn run_lns(
@@ -102,7 +124,7 @@ pub fn run_lns(
 
   let started = Instant::now();
   let mut current = initial;
-  let mut current_obj = current.total_distance;
+  let mut current_obj = ctx.objective_value(&current);
   let mut best = current.clone();
   let mut best_obj = current_obj;
   let initial_obj = current_obj;
@@ -161,7 +183,7 @@ pub fn run_lns(
     repair_greedy(ctx, &mut candidate, &order);
     repair_ns += tr.elapsed().as_nanos();
 
-    let cand_obj = candidate.total_distance;
+    let cand_obj = ctx.objective_value(&candidate);
     let delta = cand_obj - current_obj;
     let accept = delta < -1e-9 || {
       let p: f64 = rng.r#gen();
@@ -221,10 +243,14 @@ pub fn run_lns(
   let valid = best.is_valid(ctx.problem);
   LnsResult {
     operator: op.name().to_string(),
+    objective: objective_name(ctx.objective).to_string(),
     seed: cfg.seed,
     k,
     initial: initial_obj,
     best: best_obj,
+    best_distance: best.total_distance,
+    best_price: best.total_price,
+    best_empty: best.empty_distance,
     final_current: current_obj,
     iterations: iter,
     elapsed_ms,
@@ -248,7 +274,9 @@ fn shuffle<T>(v: &mut [T], rng: &mut Xoshiro256StarStar) {
   }
 }
 
-/// Start solution: the thesis' RSCIM construction with the given seed.
+/// Start solution: the thesis' RSCIM construction with the given seed (built
+/// for distance whatever the context's objective, so every objective starts
+/// from the same solution).
 pub fn initial_solution(ctx: &Context, seed: u64) -> WorkingSolution {
   vrppd_cea::generate_rscim_seeded(
     ctx.problem,
@@ -263,7 +291,8 @@ pub fn initial_solution(ctx: &Context, seed: u64) -> WorkingSolution {
 mod tests {
   use super::*;
   use crate::destroy::{OPERATOR_NAMES, build_operator};
-  use vrppd_core::Problem;
+  use std::collections::HashMap;
+  use vrppd_core::{OrderMatrix, Problem, VehicleStartMatrix, WorkingStop};
 
   fn load_problem(cell: &str, idx: usize) -> Problem {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -320,6 +349,141 @@ mod tests {
       run_lns(&ctx, initial_solution(&ctx, 11), op.as_mut(), &cfg, None).best
     };
     assert_eq!(run(), run());
+  }
+
+  /// Rebuild a solution from `best_routes` and evaluate it from scratch.
+  fn recompute(problem: &Problem, routes: &[Vec<(u32, StopKind)>]) -> WorkingSolution {
+    let idx: HashMap<u32, usize> = problem
+      .orders
+      .iter()
+      .enumerate()
+      .map(|(i, o)| (o.id, i))
+      .collect();
+    let mut sol = WorkingSolution::empty(problem.vehicles.len());
+    for (v_idx, route) in routes.iter().enumerate() {
+      sol.routes[v_idx].stops = route
+        .iter()
+        .map(|&(id, kind)| WorkingStop {
+          order_idx: idx[&id],
+          kind,
+        })
+        .collect();
+    }
+    let order_mat = OrderMatrix::build(&problem.orders);
+    let vstart_mat = VehicleStartMatrix::build(&problem.vehicles, &problem.orders);
+    sol.recalculate_all(problem, &order_mat, &vstart_mat);
+    sol
+  }
+
+  fn value_of(objective: Objective, sol: &WorkingSolution) -> f64 {
+    match objective {
+      Objective::Distance => sol.total_distance,
+      Objective::Price => sol.total_price,
+      Objective::Empty => sol.empty_distance,
+    }
+  }
+
+  fn run_with(problem: &Problem, objective: Objective, iters: u64, seed: u64) -> LnsResult {
+    let ctx = Context::with_objective(problem, objective);
+    let mut op = build_operator("random", None, 0.0, 3.0).unwrap();
+    let cfg = LnsConfig {
+      max_iters: Some(iters),
+      seed,
+      ..Default::default()
+    };
+    run_lns(&ctx, initial_solution(&ctx, seed), op.as_mut(), &cfg, None)
+  }
+
+  /// Recorded before the objective-generic refactor (20_50 instance 0, random
+  /// destroy, seed 1, 2 000 iterations) on macOS/aarch64.
+  const RECORDED_DISTANCE_BEST: f64 = 9411.860251651286;
+
+  #[test]
+  fn distance_run_is_unchanged() {
+    let problem = load_problem("20_50", 0);
+    let ctx = Context::new(&problem);
+    let mut op = build_operator("random", None, 0.0, 3.0).unwrap();
+    let cfg = LnsConfig {
+      max_iters: Some(2000),
+      seed: 1,
+      ..Default::default()
+    };
+    let res = run_lns(&ctx, initial_solution(&ctx, 1), op.as_mut(), &cfg, None);
+    assert_eq!(res.objective, "distance");
+    assert_eq!(res.best_distance, res.best);
+    // The distance matrix comes from the platform libm (sin, cos, acos), which
+    // may differ in the last bit on other platforms, so only the recording
+    // platform demands bit equality.
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+      assert_eq!(res.best, RECORDED_DISTANCE_BEST);
+    } else {
+      assert!(
+        (res.best - RECORDED_DISTANCE_BEST).abs() <= 1e-9 * RECORDED_DISTANCE_BEST,
+        "best {} vs recorded {RECORDED_DISTANCE_BEST}",
+        res.best
+      );
+    }
+  }
+
+  fn assert_tracks_recomputed_value(objective: Objective, name: &str) {
+    let problem = load_problem("10_20", 0);
+    let res = run_with(&problem, objective, 300, 5);
+    assert_eq!(res.objective, name);
+    assert!(res.valid, "{name}: invalid best");
+    let sol = recompute(&problem, &res.best_routes);
+    let value = value_of(objective, &sol);
+    assert!(
+      (res.best - value).abs() < 1e-6,
+      "{name}: best {} vs recomputed {value}",
+      res.best
+    );
+    assert!((res.best_distance - sol.total_distance).abs() < 1e-6);
+    assert!((res.best_price - sol.total_price).abs() < 1e-6);
+    assert!((res.best_empty - sol.empty_distance).abs() < 1e-6);
+    let ctx = Context::new(&problem);
+    let init = initial_solution(&ctx, 5);
+    assert!((res.initial - value_of(objective, &init)).abs() < 1e-6);
+    assert!(res.best < res.initial, "{name}: no improvement");
+    assert_eq!(res.curve.last().unwrap().best, res.best);
+  }
+
+  #[test]
+  fn price_objective_tracks_recomputed_value() {
+    assert_tracks_recomputed_value(Objective::Price, "price");
+  }
+
+  #[test]
+  fn empty_objective_tracks_recomputed_value() {
+    assert_tracks_recomputed_value(Objective::Empty, "empty");
+  }
+
+  #[test]
+  fn price_run_differs_from_distance_run() {
+    let problem = load_problem("10_20", 0);
+    let price = problem.vehicles[0].price_km;
+    assert!(
+      problem
+        .vehicles
+        .iter()
+        .any(|v| (v.price_km - price).abs() > 1e-9),
+      "fixture needs unequal vehicle prices"
+    );
+    let by_distance = run_with(&problem, Objective::Distance, 300, 5);
+    let by_price = run_with(&problem, Objective::Price, 300, 5);
+    assert_ne!(by_distance.best_routes, by_price.best_routes);
+  }
+
+  #[test]
+  fn result_without_objective_fields_still_parses() {
+    let problem = load_problem("10_10", 0);
+    let mut json = serde_json::to_value(run_with(&problem, Objective::Price, 10, 1)).unwrap();
+    let obj = json.as_object_mut().unwrap();
+    for key in ["objective", "best_distance", "best_price", "best_empty"] {
+      obj.remove(key).unwrap();
+    }
+    let old: LnsResult = serde_json::from_value(json).unwrap();
+    assert_eq!(old.objective, "distance");
+    assert!(old.best_distance.is_nan() && old.best_price.is_nan() && old.best_empty.is_nan());
   }
 
   #[test]

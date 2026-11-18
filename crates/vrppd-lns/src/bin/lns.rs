@@ -8,14 +8,14 @@ use std::time::Instant;
 use clap::Parser;
 use rayon::prelude::*;
 use serde::Serialize;
+use vrppd_core::Objective;
 use vrppd_lns::io::{cell_name, init_threads, load_instances, resolve_cell_dir};
-use vrppd_lns::{Context, LnsConfig, build_operator, initial_solution, run_lns};
+use vrppd_lns::{
+  Context, LnsConfig, build_operator, initial_solution, objective_name, parse_objective, run_lns,
+};
 
 #[derive(Parser, Debug)]
-#[command(
-  name = "lns",
-  about = "Large Neighbourhood Search runs for the VRPPD (distance objective)."
-)]
+#[command(name = "lns", about = "Large Neighbourhood Search runs for the VRPPD.")]
 struct Args {
   /// Thesis cell name (e.g. 10_20) or a directory of instance JSON files.
   #[arg(long)]
@@ -23,6 +23,9 @@ struct Args {
   /// Destroy operator: random | worst | related | adaptive | neural.
   #[arg(long, default_value = "random")]
   operator: String,
+  /// Objective to minimise: distance | price | empty.
+  #[arg(long, default_value = "distance", value_parser = parse_objective)]
+  objective: Objective,
   /// Iteration budget (0 = none).
   #[arg(long, default_value_t = 5000)]
   iters: u64,
@@ -126,8 +129,9 @@ fn main() {
     .flat_map(|i| (0..args.repeats).map(move |r| (i, r)))
     .collect();
   eprintln!(
-    "lns: cell={cell} operator={} instances={} repeats={} jobs={} threads={threads} iters={:?} secs={:?}",
+    "lns: cell={cell} operator={} objective={} instances={} repeats={} jobs={} threads={threads} iters={:?} secs={:?}",
     args.operator,
+    objective_name(args.objective),
     instances.len(),
     args.repeats,
     jobs.len(),
@@ -145,7 +149,7 @@ fn main() {
       if !args.force && json_path.exists() {
         return 0;
       }
-      let ctx = Context::new(&inst.problem);
+      let ctx = Context::with_objective(&inst.problem, args.objective);
       let mut op = build_operator(
         &args.operator,
         args.weights.as_deref(),

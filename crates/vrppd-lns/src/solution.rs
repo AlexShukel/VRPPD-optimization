@@ -1,21 +1,46 @@
 //! Fast solution helpers for LNS: order lookup, removal, delta-cost cheapest
 //! insertion (pickup before delivery, capacity feasible) and route savings.
 //!
-//! Only the DISTANCE objective is supported by the delta evaluation; the
-//! `WorkingRoute` totals (distance, empty distance, price) are still kept
-//! consistent by recalculating a route after every structural change.
+//! Insertion minimises the context's objective: distance and price use the
+//! constant-time distance delta (price scales it by the vehicle's `price_km`),
+//! empty distance recalculates each trial route. The `WorkingRoute` totals
+//! (distance, empty distance, price) are kept consistent by recalculating a
+//! route after every structural change. Removal savings stay distance-based.
 
 use vrppd_core::{
-  OrderMatrix, Problem, StopKind, VehicleStartMatrix, WorkingRoute, WorkingSolution, WorkingStop,
-  stop_node,
+  Objective, OrderMatrix, Problem, StopKind, VehicleStartMatrix, WorkingRoute, WorkingSolution,
+  WorkingStop, stop_node,
 };
 
 const MAX_LOAD: f64 = 1.0;
 const LOAD_TOLERANCE: f64 = 1e-6;
 
+/// Name of an objective in result files and on the command line.
+pub fn objective_name(objective: Objective) -> &'static str {
+  match objective {
+    Objective::Distance => "distance",
+    Objective::Price => "price",
+    Objective::Empty => "empty",
+  }
+}
+
+/// Parse `distance | price | empty`.
+pub fn parse_objective(name: &str) -> Result<Objective, String> {
+  match name {
+    "distance" => Ok(Objective::Distance),
+    "price" => Ok(Objective::Price),
+    "empty" => Ok(Objective::Empty),
+    other => Err(format!(
+      "unknown objective '{other}' (expected distance | price | empty)"
+    )),
+  }
+}
+
 /// Static per-instance data shared by all LNS components.
 pub struct Context<'a> {
   pub problem: &'a Problem,
+  /// Objective minimised by insertion and acceptance.
+  pub objective: Objective,
   pub order_mat: OrderMatrix,
   pub vstart_mat: VehicleStartMatrix,
   /// 1 / load_factor per order.
@@ -30,7 +55,12 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
+  /// Context for the distance objective.
   pub fn new(problem: &'a Problem) -> Self {
+    Self::with_objective(problem, Objective::Distance)
+  }
+
+  pub fn with_objective(problem: &'a Problem, objective: Objective) -> Self {
     let n = problem.orders.len();
     let order_mat = OrderMatrix::build(&problem.orders);
     let vstart_mat = VehicleStartMatrix::build(&problem.vehicles, &problem.orders);
@@ -72,12 +102,23 @@ impl<'a> Context<'a> {
 
     Self {
       problem,
+      objective,
       order_mat,
       vstart_mat,
       demand,
       nearest_other,
       relatedness,
       max_dist,
+    }
+  }
+
+  /// The context's objective (distance, price or empty distance) of a whole solution.
+  #[inline(always)]
+  pub fn objective_value(&self, sol: &WorkingSolution) -> f64 {
+    match self.objective {
+      Objective::Distance => sol.total_distance,
+      Objective::Price => sol.total_price,
+      Objective::Empty => sol.empty_distance,
     }
   }
 
@@ -196,17 +237,136 @@ pub struct Insertion {
   /// Delivery is inserted before original index `delivery_pos` (pickup_pos..=len).
   /// After insertion the delivery sits at index `delivery_pos + 1`.
   pub delivery_pos: usize,
+  /// Change of the context's objective.
   pub delta: f64,
+  /// Change of the route distance (equals `delta` for the distance objective).
+  pub distance_delta: f64,
+}
+
+impl Insertion {
+  /// Smaller objective change first; ties go to the smaller distance change.
+  #[inline(always)]
+  fn better_than(&self, other: &Insertion) -> bool {
+    self.delta < other.delta
+      || (self.delta == other.delta && self.distance_delta < other.distance_delta)
+  }
 }
 
 /// Evaluate every feasible insertion position for `order_idx` in `route` and
-/// return the cheapest (by distance delta).
+/// return the cheapest by the context's objective.
 pub fn best_insertion_in_route(
   ctx: &Context,
   route: &WorkingRoute,
   v_idx: usize,
   order_idx: usize,
 ) -> Option<Insertion> {
+  match ctx.objective {
+    Objective::Distance => best_distance_insertion_in_route(ctx, route, v_idx, order_idx),
+    // `price_km` (> 0) is constant along a route, so the distance-cheapest
+    // position is also the price-cheapest one.
+    Objective::Price => {
+      let price_km = ctx.problem.vehicles[v_idx].price_km;
+      best_distance_insertion_in_route(ctx, route, v_idx, order_idx).map(|ins| Insertion {
+        delta: ins.delta * price_km,
+        ..ins
+      })
+    }
+    Objective::Empty => best_empty_insertion_in_route(ctx, route, v_idx, order_idx),
+  }
+}
+
+fn best_distance_insertion_in_route(
+  ctx: &Context,
+  route: &WorkingRoute,
+  v_idx: usize,
+  order_idx: usize,
+) -> Option<Insertion> {
+  let mut best: Option<Insertion> = None;
+  for_each_feasible_insertion(
+    ctx,
+    route,
+    v_idx,
+    order_idx,
+    |pickup_pos, delivery_pos, delta| {
+      if best.as_ref().is_none_or(|b| delta < b.delta) {
+        best = Some(Insertion {
+          v_idx,
+          pickup_pos,
+          delivery_pos,
+          delta,
+          distance_delta: delta,
+        });
+      }
+    },
+  );
+  best
+}
+
+/// Empty distance depends on the load along the whole route, so every
+/// feasible position is evaluated by recalculating the trial route. Ties are
+/// common (a pair inserted inside a loaded stretch adds no empty distance)
+/// and go to the smaller distance increase.
+fn best_empty_insertion_in_route(
+  ctx: &Context,
+  route: &WorkingRoute,
+  v_idx: usize,
+  order_idx: usize,
+) -> Option<Insertion> {
+  let stops = &route.stops;
+  let pickup = WorkingStop {
+    order_idx,
+    kind: StopKind::Pickup,
+  };
+  let delivery = WorkingStop {
+    order_idx,
+    kind: StopKind::Delivery,
+  };
+  let mut trial = WorkingRoute {
+    stops: Vec::with_capacity(stops.len() + 2),
+    ..WorkingRoute::default()
+  };
+  let mut best: Option<Insertion> = None;
+  for_each_feasible_insertion(
+    ctx,
+    route,
+    v_idx,
+    order_idx,
+    |pickup_pos, delivery_pos, distance_delta| {
+      trial.stops.clear();
+      trial.stops.extend_from_slice(&stops[..pickup_pos]);
+      trial.stops.push(pickup);
+      trial
+        .stops
+        .extend_from_slice(&stops[pickup_pos..delivery_pos]);
+      trial.stops.push(delivery);
+      trial.stops.extend_from_slice(&stops[delivery_pos..]);
+      trial.recalculate(v_idx, ctx.problem, &ctx.order_mat, &ctx.vstart_mat);
+      let ins = Insertion {
+        v_idx,
+        pickup_pos,
+        delivery_pos,
+        delta: trial.empty_distance - route.empty_distance,
+        distance_delta,
+      };
+      if best.as_ref().is_none_or(|b| ins.better_than(b)) {
+        best = Some(ins);
+      }
+    },
+  );
+  best
+}
+
+/// Call `visit(pickup_pos, delivery_pos, distance_delta)` for every
+/// capacity-feasible insertion of `order_idx` into `route` (positions as in
+/// [`Insertion`]), with the constant-time distance delta.
+#[inline(always)]
+fn for_each_feasible_insertion(
+  ctx: &Context,
+  route: &WorkingRoute,
+  v_idx: usize,
+  order_idx: usize,
+  mut visit: impl FnMut(usize, usize, f64),
+) {
   let stops = &route.stops;
   let len = stops.len();
   let d = ctx.demand[order_idx];
@@ -232,8 +392,6 @@ pub fn best_insertion_in_route(
     load_after.push(load);
   }
 
-  let mut best: Option<Insertion> = None;
-
   for i in 0..=len {
     let load_before_pickup = if i == 0 { 0.0 } else { load_after[i - 1] };
     if load_before_pickup + d > MAX_LOAD + LOAD_TOLERANCE {
@@ -253,15 +411,7 @@ pub fn best_insertion_in_route(
       } else {
         (0.0, prev_to_pickup + p_d)
       };
-      let delta = added - removed;
-      if best.as_ref().is_none_or(|b| delta < b.delta) {
-        best = Some(Insertion {
-          v_idx,
-          pickup_pos: i,
-          delivery_pos: i,
-          delta,
-        });
-      }
+      visit(i, i, added - removed);
     }
 
     if i >= len {
@@ -287,27 +437,17 @@ pub fn best_insertion_in_route(
       } else {
         ctx.stop_dist(prev_d, delivery)
       };
-      let delta = pickup_part + delivery_part;
-      if best.as_ref().is_none_or(|b| delta < b.delta) {
-        best = Some(Insertion {
-          v_idx,
-          pickup_pos: i,
-          delivery_pos: j,
-          delta,
-        });
-      }
+      visit(i, j, pickup_part + delivery_part);
     }
   }
-
-  best
 }
 
-/// Cheapest insertion over all vehicles.
+/// Cheapest insertion over all vehicles by the context's objective.
 pub fn best_insertion(ctx: &Context, sol: &WorkingSolution, order_idx: usize) -> Option<Insertion> {
   let mut best: Option<Insertion> = None;
   for (v_idx, route) in sol.routes.iter().enumerate() {
     if let Some(ins) = best_insertion_in_route(ctx, route, v_idx, order_idx)
-      && best.as_ref().is_none_or(|b| ins.delta < b.delta)
+      && best.as_ref().is_none_or(|b| ins.better_than(b))
     {
       best = Some(ins);
     }
@@ -454,6 +594,86 @@ mod tests {
         let mut check = sol.clone();
         check.recalculate_all(&problem, &ctx.order_mat, &ctx.vstart_mat);
         assert!((check.total_distance - sol.total_distance).abs() < 1e-6);
+      }
+    }
+  }
+
+  /// Smallest objective change over every feasible insertion, each evaluated
+  /// by a full route recalculation.
+  fn brute_force_best_delta(ctx: &Context, sol: &WorkingSolution, o: usize) -> f64 {
+    let mut best = f64::INFINITY;
+    for (v_idx, route) in sol.routes.iter().enumerate() {
+      let len = route.stops.len();
+      for p in 0..=len {
+        for d in (p + 1)..=(len + 1) {
+          let mut trial = route.clone();
+          trial.stops.insert(
+            p,
+            WorkingStop {
+              order_idx: o,
+              kind: StopKind::Pickup,
+            },
+          );
+          trial.stops.insert(
+            d,
+            WorkingStop {
+              order_idx: o,
+              kind: StopKind::Delivery,
+            },
+          );
+          if !trial.is_capacity_feasible_for_partial(ctx.problem) {
+            continue;
+          }
+          trial.recalculate(v_idx, ctx.problem, &ctx.order_mat, &ctx.vstart_mat);
+          let delta = match ctx.objective {
+            Objective::Distance => trial.total_distance - route.total_distance,
+            Objective::Price => trial.total_price - route.total_price,
+            Objective::Empty => trial.empty_distance - route.empty_distance,
+          };
+          best = best.min(delta);
+        }
+      }
+    }
+    best
+  }
+
+  #[test]
+  fn objective_insertion_is_cheapest_and_exact() {
+    let problem = load_problem("10_20", 0);
+    for objective in [Objective::Price, Objective::Empty] {
+      let ctx = Context::with_objective(&problem, objective);
+      let mut rng = Xoshiro256StarStar::seed_from_u64(7);
+      let mut sol = vrppd_cea::generate_rscim(
+        &problem,
+        &ctx.order_mat,
+        &ctx.vstart_mat,
+        Objective::Distance,
+        &mut rng,
+      );
+      let n = problem.orders.len();
+      for round in 0..10 {
+        let mut orders: Vec<usize> = (0..n).collect();
+        orders.shuffle(&mut rng);
+        let removed: Vec<usize> = orders.into_iter().take(3 + round % 4).collect();
+        destroy(&ctx, &mut sol, &removed);
+        for &o in &removed {
+          let ins = best_insertion(&ctx, &sol, o).expect("insertion exists");
+          let brute = brute_force_best_delta(&ctx, &sol, o);
+          assert!(
+            (ins.delta - brute).abs() < 1e-6,
+            "{objective:?}: delta {} vs brute force {brute}",
+            ins.delta
+          );
+          let before = ctx.objective_value(&sol);
+          apply_insertion(&ctx, &mut sol, o, ins);
+          assert!(sol.is_valid(&problem));
+          assert!(
+            (ctx.objective_value(&sol) - before - ins.delta).abs() < 1e-6,
+            "{objective:?}: applied change {} vs delta {}",
+            ctx.objective_value(&sol) - before,
+            ins.delta
+          );
+        }
       }
     }
   }

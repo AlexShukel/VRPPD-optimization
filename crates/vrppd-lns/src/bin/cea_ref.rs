@@ -1,5 +1,5 @@
 //! Reference values: best of `--runs` CEA runs (thesis settings, wall-time
-//! budget) per instance, distance objective. Runs instances sequentially
+//! budget) per instance in the chosen objective. Runs instances sequentially
 //! because CEA is itself multi-threaded.
 
 use std::fs;
@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use vrppd_cea::{CeaConfig, solve_cea_seeded};
 use vrppd_core::Objective;
 use vrppd_lns::io::{cell_name, load_instances, resolve_cell_dir};
+use vrppd_lns::{objective_name, parse_objective};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -20,6 +21,9 @@ use vrppd_lns::io::{cell_name, load_instances, resolve_cell_dir};
 struct Args {
   #[arg(long)]
   cell: String,
+  /// Objective the CEA minimises and the values are given in: distance | price | empty.
+  #[arg(long, default_value = "distance", value_parser = parse_objective)]
+  objective: Objective,
   #[arg(long, default_value_t = 3)]
   runs: usize,
   #[arg(long, default_value_t = 60)]
@@ -35,10 +39,18 @@ struct Args {
   max_instances: Option<usize>,
 }
 
+fn distance_name() -> String {
+  objective_name(Objective::Distance).to_string()
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct RefRecord {
   cell: String,
   instance: String,
+  /// Objective of `runs` and `best`; files written before the field existed
+  /// are distance references.
+  #[serde(default = "distance_name")]
+  objective: String,
   n_orders: usize,
   n_vehicles: usize,
   runs: Vec<f64>,
@@ -65,8 +77,9 @@ fn main() {
     .and_then(|t| serde_json::from_str(&t).ok())
     .unwrap_or_default();
   let threads = args.threads.clamp(1, 6);
+  let objective = objective_name(args.objective);
   eprintln!(
-    "cea_ref: cell={cell} instances={} runs={} seconds={} threads={threads}",
+    "cea_ref: cell={cell} objective={objective} instances={} runs={} seconds={} threads={threads}",
     instances.len(),
     args.runs,
     args.seconds
@@ -74,13 +87,14 @@ fn main() {
   for inst in &instances {
     if records
       .iter()
-      .any(|r| r.instance == inst.id && r.cell == cell)
+      .any(|r| r.instance == inst.id && r.cell == cell && r.objective == objective)
     {
       continue;
     }
     let mut rec = RefRecord {
       cell: cell.clone(),
       instance: inst.id.clone(),
+      objective: objective.to_string(),
       n_orders: inst.problem.orders.len(),
       n_vehicles: inst.problem.vehicles.len(),
       runs: Vec::new(),
@@ -97,8 +111,8 @@ fn main() {
         ..CeaConfig::default()
       };
       let t = Instant::now();
-      let solved = solve_cea_seeded(&inst.problem, Objective::Distance, cfg, seed);
-      let v = solved.solution.total_distance;
+      let solved = solve_cea_seeded(&inst.problem, args.objective, cfg, seed);
+      let v = args.objective.energy(&solved.solution);
       rec.runs.push(v);
       rec.runtimes_ms.push(t.elapsed().as_secs_f64() * 1000.0);
       rec.generations.push(solved.generations);
