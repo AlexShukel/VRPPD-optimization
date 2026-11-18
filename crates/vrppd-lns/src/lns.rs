@@ -454,7 +454,9 @@ mod tests {
 
   /// Recorded before the objective-generic refactor (20_50 instance 0, random
   /// destroy, seed 1, 2 000 iterations) on macOS/aarch64.
-  const RECORDED_DISTANCE_BEST: f64 = 9411.860251651286;
+  const RECORDED_DISTANCE_BEST_MACOS_AARCH64: f64 = 9411.860251651286;
+  /// The same run on Linux/x86_64 (the Stage 3 compute host).
+  const RECORDED_DISTANCE_BEST_LINUX_X86_64: f64 = 9411.860156705477;
 
   #[test]
   fn distance_run_is_unchanged() {
@@ -472,9 +474,20 @@ mod tests {
     // `best` is the from-scratch evaluation of the best solution, which
     // differs from the incrementally tracked value in the last bits, so this
     // compares with a tolerance (the recorded value itself is unchanged).
+    // The platform's libm computes the haversine sin/cos differently in the
+    // last bits, which changes the odd acceptance decision and so the
+    // trajectory: each known platform has its own recorded value, any other
+    // platform gets a loose check against the macOS one.
+    let (recorded, tolerance) = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+      (RECORDED_DISTANCE_BEST_MACOS_AARCH64, 1e-9)
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+      (RECORDED_DISTANCE_BEST_LINUX_X86_64, 1e-9)
+    } else {
+      (RECORDED_DISTANCE_BEST_MACOS_AARCH64, 1e-6)
+    };
     assert!(
-      (res.best - RECORDED_DISTANCE_BEST).abs() <= 1e-9 * RECORDED_DISTANCE_BEST,
-      "best {} vs recorded {RECORDED_DISTANCE_BEST}",
+      (res.best - recorded).abs() <= tolerance * recorded,
+      "best {} vs recorded {recorded}",
       res.best
     );
   }
