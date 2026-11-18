@@ -32,12 +32,17 @@ dropout 0.1, and the token statistics come from the training instances.
 Writes to --out, every file as *.tmp then renamed:
   train_log.csv  per episode: episode, hours, mean_reward, random_reward, entropy, loss
   val_log.csv    per validation: episode, hours, val_reward
-  weights.json   the best validation checkpoint as V1 weights ("training": "reinforce")
+  weights.json   the best validation checkpoint as V1 weights ("training": "reinforce";
+                 train_config also holds the validation seed and files and the torch threads)
   checkpoint.pt  model, optimiser, episode, elapsed hours, best validation reward,
-                 baseline and generator states as of the last validation
+                 baseline and generator states as of the last validation, the
+                 validation seed and files, and the arguments of the first invocation
   DONE           when the run ends normally (--max-hours or --max-episodes reached)
 --resume continues from checkpoint.pt and drops log rows after its episode;
---max-hours counts the hours stored in the checkpoint plus this process's.
+--max-hours counts the hours stored in the checkpoint plus this process's. A resume
+whose arguments differ from the first invocation's (see RESUME_ARGS; only
+--max-hours, --max-episodes, --device and --threads may change) is refused before
+anything in --out is touched.
 """
 from __future__ import annotations
 
@@ -66,6 +71,11 @@ EMA_DECAY = 0.95  # moving-average baseline when there is one sample per state
 CLIP_NORM = 1.0
 TRAIN_LOG_HEADER = "episode,hours,mean_reward,random_reward,entropy,loss"
 VAL_LOG_HEADER = "episode,hours,val_reward"
+# Arguments a resumed run must share with its first invocation (after resolve_architecture);
+# the paths among them are compared as given, after os.path.normpath on both sides.
+RESUME_ARGS = ["init", "samples", "entropy_beta", "batch_envs", "horizon", "lr", "seed", "d", "heads", "n_att",
+               "dropout", "train_instances_dir", "val_instances_dir"]
+PATH_ARGS = {"init", "train_instances_dir", "val_instances_dir"}
 
 # policy() -> (scores (B, N), order_pad (B, N)) of the environments' current states
 Policy = Callable[[], tuple[torch.Tensor, torch.Tensor]]
@@ -275,6 +285,21 @@ def resolve_architecture(args: argparse.Namespace) -> int:
     return ff_mult
 
 
+def changed_args(first: dict[str, Any], now: dict[str, Any]) -> list[str]:
+    """One line per argument of RESUME_ARGS whose value now differs from the first invocation's."""
+    def norm(key: str, value: Any) -> Any:
+        return os.path.normpath(value) if key in PATH_ARGS and isinstance(value, str) else value
+
+    missing = object()
+    lines = []
+    for key in RESUME_ARGS:
+        old, new = norm(key, first.get(key, missing)), norm(key, now[key])
+        if old != new:
+            shown = "(not recorded)" if old is missing else repr(old)
+            lines.append(f"--{key.replace('_', '-')}: {shown} in the first invocation, {new!r} now")
+    return lines
+
+
 def read_instance(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
@@ -331,11 +356,13 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
     ap.add_argument("--dropout", type=float, default=None,
                     help="default: --init's train_config.dropout, else 0.1; an explicit value wins")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
+    ap.add_argument("--threads", type=int, default=4, help="torch CPU threads of this process")
     ap.add_argument("--resume", action="store_true", help="continue from OUT/checkpoint.pt if it exists")
     args = ap.parse_args(argv)
     if args.samples < 1 or args.horizon < 1:
         raise SystemExit("--samples and --horizon must be at least 1")
     ff_mult = resolve_architecture(args)
+    torch.set_num_threads(args.threads)
     if make_env is None:
         import vrppd_py  # imported here so that the pure functions work without the binding
         make_env = vrppd_py.BatchEnv
@@ -347,6 +374,12 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
     done_path = os.path.join(out, "DONE")
     if not args.resume and (os.path.exists(ck_path) or os.path.exists(log_path)):
         raise SystemExit(f"{out} holds an earlier run: pass --resume to continue it, or another --out")
+    ck = torch.load(ck_path, map_location="cpu") if args.resume and os.path.exists(ck_path) else None
+    if ck is not None and (diffs := changed_args(ck["args"], vars(args))):
+        raise SystemExit(f"{out}: refusing to resume with arguments that differ from the run's first invocation:\n  "
+                         + "\n  ".join(diffs) + "\nresume with the first invocation's arguments, or start the run in "
+                         "another --out")
+    first_args = dict(ck["args"] if ck is not None else vars(args))  # stored in every checkpoint, never replaced
     os.makedirs(out, exist_ok=True)
     if os.path.exists(done_path):
         os.remove(done_path)
@@ -357,7 +390,6 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
 
     torch.manual_seed(args.seed)
     model = V1Encoder(d=args.d, heads=args.heads, n_att=args.n_att, ff_mult=ff_mult, dropout=args.dropout)
-    ck = torch.load(ck_path, map_location="cpu") if args.resume and os.path.exists(ck_path) else None
     if ck is not None:
         model.load_state_dict(ck["model"])
         tok_mean, tok_std = np.asarray(ck["tok_mean"]), np.asarray(ck["tok_std"])
@@ -399,14 +431,15 @@ def main(argv: list[str] | None = None, make_env=None) -> None:
                      "train_config": {"init": args.init, "samples": args.samples, "entropy_beta": args.entropy_beta,
                                       "batch_envs": args.batch_envs, "horizon": args.horizon, "lr": args.lr,
                                       "dropout": args.dropout, "seed": args.seed, "episode": episode,
-                                      "val_reward": val}}
+                                      "val_reward": val, "val_seed": VAL_SEED, "val_files": val_paths,
+                                      "threads": torch.get_num_threads()}}
             model.eval()
             export_json(model, tok_mean, tok_std, weights_path, extra=extra)
             model.train()
         state["val_episode"], state["hours"] = episode, hours()
         ck_out = {"model": model.state_dict(), "optimizer": opt.state_dict(), **state,
                   "tok_mean": [float(v) for v in tok_mean], "tok_std": [float(v) for v in tok_std],
-                  "rng": rng_states(generator, rng), "args": vars(args)}
+                  "rng": rng_states(generator, rng), "val_seed": VAL_SEED, "val_files": val_paths, "args": first_args}
         save_atomic(ck_path, lambda tmp: torch.save(ck_out, tmp))
 
     while (args.max_episodes is None or state["episode"] < args.max_episodes) and hours() < args.max_hours:

@@ -30,8 +30,6 @@ from vrppd_nn.fileio import write_atomic, write_json_atomic
 from vrppd_nn.metrics import evaluate_predictions
 from vrppd_nn.model import B0, save_json
 
-torch.set_num_threads(4)  # default for importers; train and train_v1 take --threads
-
 
 def peak_rss_mb() -> float:
     """Peak resident memory of this process in MB (ru_maxrss: bytes on macOS, kilobytes on Linux)."""

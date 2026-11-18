@@ -230,6 +230,72 @@ def test_refuses_to_overwrite_without_resume(tmp_path, stub_dirs):
         reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "1"), make_env=StubEnv)
 
 
+def snapshot(out):
+    return {f: (out / f).read_bytes() for f in ("checkpoint.pt", "train_log.csv", "val_log.csv", "DONE")}
+
+
+@pytest.mark.parametrize("changed", [("--seed", "1"), ("--entropy-beta", "0.05")])
+def test_resume_refuses_changed_arguments(tmp_path, stub_dirs, changed):
+    out = tmp_path / "out"
+    reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "3"), make_env=StubEnv)
+    before = snapshot(out)
+    with pytest.raises(SystemExit, match=changed[0]):
+        reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "6", "--resume", *changed), make_env=StubEnv)
+    assert snapshot(out) == before
+
+
+@pytest.mark.parametrize("same_dir", ["as given", "trailing slash"])
+def test_resume_with_only_max_episodes_changed_continues(tmp_path, stub_dirs, same_dir):
+    out = tmp_path / "out"
+    reinforce.main(stub_args(stub_dirs, out, "--max-episodes", "3"), make_env=StubEnv)
+    dirs = stub_dirs if same_dir == "as given" else [d + "/" for d in stub_dirs]  # normalised on both sides
+    reinforce.main(stub_args(dirs, out, "--max-episodes", "5", "--resume"), make_env=StubEnv)
+    assert [r[0] for r in read_log(out)] == list(range(1, 6))
+    ck = torch.load(out / "checkpoint.pt")
+    assert ck["episode"] == 5
+    assert ck["args"]["max_episodes"] == 3 and ck["args"]["resume"] is False  # the first invocation's, kept
+
+
+def test_one_sample_stores_and_restores_the_moving_average_baseline(tmp_path, stub_dirs, monkeypatch):
+    out = tmp_path / "out"
+    reinforce.main(stub_args(stub_dirs, out, "--samples", "1", "--max-episodes", "12"), make_env=StubEnv)
+    ck = torch.load(out / "checkpoint.pt")
+    assert ck["episode"] == 12 and isinstance(ck["ema"], float)
+    assert ck["val_seed"] == reinforce.VAL_SEED and ck["val_files"] == reinforce.validation_paths(stub_dirs[1])
+    tc = json.loads((out / "weights.json").read_text())["train_config"]
+    assert tc["samples"] == 1 and tc["threads"] == 4 == torch.get_num_threads()
+    assert tc["val_seed"] == reinforce.VAL_SEED and tc["val_files"] == ck["val_files"]
+
+    seen = []
+    real = reinforce.train_iteration
+
+    def spy(policy, env, opt, n_samples, beta, ema, generator, rng):
+        seen.append(ema)
+        return real(policy, env, opt, n_samples, beta, ema, generator, rng)
+
+    monkeypatch.setattr(reinforce, "train_iteration", spy)
+    reinforce.main(stub_args(stub_dirs, out, "--samples", "1", "--max-episodes", "15", "--resume"), make_env=StubEnv)
+    monkeypatch.undo()
+    assert seen[0] == ck["ema"]  # the first iteration after the resume starts from the stored baseline
+    assert torch.load(out / "checkpoint.pt")["ema"] != ck["ema"]
+
+    ref = tmp_path / "ref"  # and continues exactly where an uninterrupted run would be
+    reinforce.main(stub_args(stub_dirs, ref, "--samples", "1", "--max-episodes", "15"), make_env=StubEnv)
+    for a, b in zip(read_log(out), read_log(ref), strict=True):
+        assert a[0] == b[0] and a[2:] == pytest.approx(b[2:], rel=1e-6, abs=1e-9)
+    assert torch.load(out / "checkpoint.pt")["ema"] == pytest.approx(torch.load(ref / "checkpoint.pt")["ema"])
+
+
+def test_threads_sets_torch_threads(tmp_path, stub_dirs):
+    try:
+        reinforce.main(stub_args(stub_dirs, tmp_path / "out", "--max-episodes", "1", "--threads", "2"),
+                       make_env=StubEnv)
+        assert torch.get_num_threads() == 2
+    finally:
+        torch.set_num_threads(4)
+    assert json.loads((tmp_path / "out" / "weights.json").read_text())["train_config"]["threads"] == 2
+
+
 def test_validation_list_covers_every_cell(tmp_path):
     for cell in ("10_20", "20_50"):
         (tmp_path / "nested" / cell).mkdir(parents=True)
