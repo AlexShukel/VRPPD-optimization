@@ -40,7 +40,8 @@ def write_run(root, group, operator, cell, instance, seed, *, best=100.0, object
 def write_batch(root, batch, host="h1"):
     write_json(os.path.join(root, "batches", batch, "manifest.json"),
                {"batch": batch, "host": host, "cpu_model": "test cpu", "taskset": "", "threads": {"iters": 4, "timed": 4},
-                "commit": "abc1234", "start": "2026-11-20T10:00:00", "end": "2026-11-20T10:05:00", "runs": 1})
+                "commit": "abc1234", "start": "2026-11-20T10:00:00", "end": "2026-11-20T10:05:00", "runs": 1,
+                "train_jobs": {"b0": 6, "v1": 3}})
     with open(os.path.join(root, "batches", batch, "DONE"), "w") as f:
         f.write("")
 
@@ -173,6 +174,7 @@ def test_partial_results_aggregate(tmp_path):
         assert os.path.exists(os.path.join(root, name)), name
     training = pd.read_csv(os.path.join(root, "training_summary.csv"))
     assert {"spearman", "p_at_k", "p_at_k_best_try"} <= set(training.columns)
+    assert set(training.loc[training.group == "grid", "train_jobs"]) == {6}  # from the b0 manifest
     assert training.loc[training.is_best == True, "name"].tolist() == ["w64_d2_rank_top_s0"]  # noqa: E712
     summary = pd.read_csv(os.path.join(root, "summary.csv"))
     assert set(summary["operator"]) == set(CLASSICAL + NEURAL)

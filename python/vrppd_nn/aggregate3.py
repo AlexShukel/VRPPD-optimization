@@ -363,11 +363,15 @@ def _read_json(path: str) -> dict:
 
 def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
     """One row per trained model of a finished batch (all batches when done is None); for the
-    seed runs of the best B0 and V1 configuration also their mean and standard deviation."""
+    seed runs of the best B0 and V1 configuration also their mean and standard deviation.
+    train_jobs is the number of training processes the batch ran at once (from its manifest):
+    with more than one, train_seconds includes the contention."""
     rows = []
     for family in ("b0", "v1"):
         if done is not None and family not in done:
             continue
+        manifest = os.path.join(root, "batches", family, "manifest.json")
+        jobs = (_read_json(manifest).get("train_jobs") or {}).get(family, np.nan) if os.path.exists(manifest) else np.nan
         fdir = os.path.join(root, "models", family)
         best = _read_json(os.path.join(fdir, "best.json")) if os.path.exists(os.path.join(fdir, "best.json")) else {}
         fam_rows = {}
@@ -387,7 +391,7 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
                     "loss": c.get("loss"), "target": c.get("target"), "width": c.get("width"), "depth": c.get("depth"),
                     "d": c.get("d"), "n_att": c.get("n_att"), "dropout": c.get("dropout"),
                     "weight_decay": c.get("weight_decay"), "train_instances": c.get("train_instances"),
-                    "seed": c.get("seed")}
+                    "seed": c.get("seed"), "train_jobs": jobs}
         rows.extend(fam_rows.values())
         seed_rows = [fam_rows[s] for s in best.get("seeds", []) if s in fam_rows]
         if seed_rows:
@@ -410,7 +414,7 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
                      "train_seconds": 3600 * finish["hours"] if "hours" in finish else np.nan,
                      "val_reward": tc.get("val_reward"), "init": tc.get("init"), "samples": tc.get("samples"),
                      "entropy_beta": tc.get("entropy_beta"), "dropout": tc.get("dropout"), "seed": tc.get("seed"),
-                     "d": w["config"]["d"], "n_att": w["config"]["n_att"]})
+                     "d": w["config"]["d"], "n_att": w["config"]["n_att"], "train_jobs": 1})
     return pd.DataFrame(rows)
 
 

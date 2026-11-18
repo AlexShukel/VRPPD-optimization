@@ -6,8 +6,10 @@
 #   --list          print the batch names in queue order and exit
 #   --only <batch>  run that batch (and every prerequisite whose outputs are missing here)
 #   --from <batch>  run the queue from that batch on
-# STAGE3_HOST names scripts/stage3/hosts/<name>.env (TIMED_CPUS, TIMED_THREADS, ITER_THREADS).
-# SMOKE=1 without STAGE3_HOST uses a local configuration (host local-smoke, 4 threads, no taskset).
+# STAGE3_HOST names scripts/stage3/hosts/<name>.env (TIMED_CPUS, TIMED_THREADS, ITER_THREADS,
+# B0_JOBS and V1_JOBS: training processes run at once in the b0 and v1 batches, default 1).
+# SMOKE=1 without STAGE3_HOST uses a local configuration (host local-smoke, 4 threads, no taskset,
+# B0_JOBS 2 and V1_JOBS 1 unless set in the environment).
 # STAGE3_ROOT overrides the output directory.
 #
 # A batch is skipped when batches/<batch>/DONE exists. A finished batch runs again only when a
@@ -22,6 +24,11 @@
 # host, thread count or CPU list. One pipeline at a time: lock <root>/pipeline.pid.
 set -euo pipefail
 shopt -s nullglob inherit_errexit
+# wait -n -p (bash 5.1) reaps the concurrent training jobs one at a time
+((BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1))) || {
+  echo "run_all.sh needs bash 5.1 or newer" >&2
+  exit 1
+}
 cd "$(dirname "$0")/../.."
 REPO="$(pwd)"
 
@@ -61,12 +68,14 @@ if [[ -n "${STAGE3_HOST:-}" ]]; then
   source "$HOST_FILE"
   HOST_NAME="$STAGE3_HOST"
 elif [[ $SMOKE == 1 ]]; then
-  HOST_NAME=local-smoke TIMED_CPUS="" TIMED_THREADS=4 ITER_THREADS=4
+  HOST_NAME=local-smoke TIMED_CPUS="" TIMED_THREADS=4 ITER_THREADS=4 B0_JOBS=${B0_JOBS:-2} V1_JOBS=${V1_JOBS:-1}
 else
   die "set STAGE3_HOST=<name> (scripts/stage3/hosts/<name>.env), or SMOKE=1 for the local smoke configuration"
 fi
 TIMED_CPUS="${TIMED_CPUS:-}"
 CPU_LIST="${TIMED_CPUS:-none}"
+B0_JOBS="${B0_JOBS:-1}" V1_JOBS="${V1_JOBS:-1}"
+((B0_JOBS >= 1 && V1_JOBS >= 1)) || die "B0_JOBS and V1_JOBS must be at least 1"
 if [[ -n $TIMED_CPUS ]]; then
   command -v taskset > /dev/null || die "TIMED_CPUS is set but taskset is missing"
 fi
@@ -229,6 +238,36 @@ op_args() { # operator -> OP_ARGS (neural operators take weights and tau from se
   OP_ARGS=(--operator "$operator" --weights "$ROOT/$weights" --tau "$tau")
 }
 
+# Training runs as background jobs, at most JOBS at once. Each job writes only its own model
+# directory (seeds are per model), so its result does not depend on what runs beside it; the
+# batch picks best configurations and writes best.json itself, after phase_wait.
+JOBS=1 FAILED=()
+declare -A JOB_OUT=()
+
+reap_one() { # wait for one training job; log it, or remember it as failed
+  local pid="" status=0 out
+  wait -n -p pid || status=$?
+  [[ -n $pid ]] || return 0
+  out=${JOB_OUT[$pid]}
+  unset "JOB_OUT[$pid]"
+  if ((status == 0)); then
+    log "trained $out ($(grep -c '^epoch' "$out/train.log") epochs)"
+  else
+    FAILED+=("$out")
+  fi
+}
+
+phase_wait() { # end of a phase: reap every job; fail the batch (no DONE) if any of them failed
+  local out
+  while ((${#JOB_OUT[@]})); do reap_one; done
+  ((${#FAILED[@]})) || return 0
+  for out in "${FAILED[@]}"; do
+    echo "--- $out/train.log, last lines:" >&2
+    tail -5 "$out/train.log" >&2 2> /dev/null || echo "(no train.log)" >&2
+  done
+  die "training failed in batch $BATCH (${#FAILED[@]} models): ${FAILED[*]}; DONE not written"
+}
+
 train_model() { # module out train-args...; models are ranked by precision at k against the best try,
   # which does not depend on the training target (mean or top)
   local module=$1 out=$2
@@ -236,13 +275,11 @@ train_model() { # module out train-args...; models are ranked by precision at k 
   RUNS=$((RUNS + 1))
   expect file "$out/metrics.json"
   if [[ -f $out/metrics.json ]]; then return; fi
+  while ((${#JOB_OUT[@]} >= JOBS)); do reap_one; done
   mkdir -p "$out"
   "$PY" -m "vrppd_nn.$module" --train "$LABELS/train.jsonl" --val "$LABELS/val.jsonl" --out "$out" --device auto \
-    --select-by best_try --epochs "$EPOCHS" --patience "$PATIENCE" "$@" > "$out/train.log" 2>&1 || {
-    tail -5 "$out/train.log"
-    die "training $out failed"
-  }
-  log "trained $out ($(grep -c '^epoch' "$out/train.log") epochs)"
+    --select-by best_try --epochs "$EPOCHS" --patience "$PATIENCE" "$@" > "$out/train.log" 2>&1 &
+  JOB_OUT[$!]=$out
 }
 
 write_best() { # path best seeds trainsize ("n=dir ...")
@@ -298,11 +335,13 @@ batch_data() {
   done
 }
 
-batch_b0() {
+batch_b0() { # phases: grid, then training-set sizes and seeds of the best configuration
   local grid="$MODELS/b0/grid" loss target w d n s best name cfg fields bw bd bl bt sizes="" seeds=""
+  JOBS=$B0_JOBS
   for loss in $LOSSES; do for target in $TARGETS; do for w in $B0_WIDTHS; do for d in $B0_DEPTHS; do
     train_model train "$grid/w${w}_d${d}_${loss}_${target}_s0" --width "$w" --depth "$d" --loss "$loss" --target "$target" --seed 0
   done; done; done; done
+  phase_wait
   best=$(pick_best "$grid"/*)
   name=$(basename "$best") cfg=${name%_s0}
   fields=$(cfg_fields "$best/config.json" width depth loss target)
@@ -317,6 +356,7 @@ batch_b0() {
       --seed 0 --train-instances "$n"
     sizes+=" $n=trainsize/${cfg}_n${n}_s0"
   done
+  phase_wait
   for s in $SEEDS; do
     if [[ $s == 0 ]]; then
       seeds+=" grid/$name"
@@ -325,11 +365,13 @@ batch_b0() {
     train_model train "$MODELS/b0/seeds/${cfg}_s$s" --width "$bw" --depth "$bd" --loss "$bl" --target "$bt" --seed "$s"
     seeds+=" seeds/${cfg}_s$s"
   done
+  phase_wait
   write_best "$MODELS/b0/best.json" "grid/$name" "$seeds" "$sizes"
 }
 
-batch_v1() {
+batch_v1() { # phases: size grid, then dropout x weight decay on the best size, then seeds
   local loss target d a p wd s best rel name cfg fields sd sa bd ba bp bwd seeds=""
+  JOBS=$V1_JOBS
   best=$(pick_best "$MODELS/b0/grid"/*)
   fields=$(cfg_fields "$best/config.json" loss target)
   read -r loss target <<< "$fields"
@@ -338,6 +380,7 @@ batch_v1() {
     v1_train "$MODELS/v1/grid/d${d}_a${a}_do${V1_BASE_DROPOUT}_wd${V1_BASE_WD}_s0" --d "$d" --n-att "$a" --seed 0 \
       --dropout "$V1_BASE_DROPOUT" --weight-decay "$V1_BASE_WD"
   done; done
+  phase_wait
   best=$(pick_best "$MODELS/v1/grid"/*)
   fields=$(cfg_fields "$best/config.json" d n_att)
   read -r sd sa <<< "$fields"
@@ -345,6 +388,7 @@ batch_v1() {
     [[ $p == "$V1_BASE_DROPOUT" && $wd == "$V1_BASE_WD" ]] && continue # the size-grid run
     v1_train "$MODELS/v1/reg/d${sd}_a${sa}_do${p}_wd${wd}_s0" --d "$sd" --n-att "$sa" --seed 0 --dropout "$p" --weight-decay "$wd"
   done; done
+  phase_wait
   best=$(pick_best "$MODELS/v1/grid"/* "$MODELS/v1/reg"/*)
   rel=${best#"$MODELS/v1/"} name=$(basename "$best") cfg=${name%_s0}
   fields=$(cfg_fields "$best/config.json" d n_att dropout weight_decay)
@@ -358,6 +402,7 @@ batch_v1() {
     v1_train "$MODELS/v1/seeds/${cfg}_s$s" --d "$bd" --n-att "$ba" --seed "$s" --dropout "$bp" --weight-decay "$bwd"
     seeds+=" seeds/${cfg}_s$s"
   done
+  phase_wait
   write_best "$MODELS/v1/best.json" "$rel" "$seeds" ""
 }
 
@@ -541,7 +586,7 @@ run_batch() {
   else
     echo "$HOST_NAME $(date '+%FT%T')" > "$d/STARTED"
   fi
-  BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=()
+  BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=() FAILED=() JOBS=1
   log "=== batch $b: start"
   case $b in
     data) batch_data ;;
@@ -558,12 +603,13 @@ run_batch() {
   esac
   verify_outputs
   "$PY" - "$d/manifest.json" "$b" "$HOST_NAME" "$(cpu_model)" "$TIMED_CPUS" "$ITER_THREADS" "$TIMED_THREADS" \
-    "$(git_commit)" "$BATCH_T0" "$(date '+%FT%T')" "$RUNS" "$SMOKE" << 'EOF'
+    "$(git_commit)" "$BATCH_T0" "$(date '+%FT%T')" "$RUNS" "$SMOKE" "$B0_JOBS" "$V1_JOBS" << 'EOF'
 import json, os, sys
-path, batch, host, cpu, taskset, it, tt, commit, start, end, runs, smoke = sys.argv[1:]
+path, batch, host, cpu, taskset, it, tt, commit, start, end, runs, smoke, b0_jobs, v1_jobs = sys.argv[1:]
+# train_jobs: training processes run at once (train_seconds of those models include the contention)
 m = {"batch": batch, "host": host, "cpu_model": cpu, "taskset": taskset,
      "threads": {"iterations": int(it), "timed": int(tt)}, "commit": commit, "start": start, "end": end,
-     "runs": int(runs), "smoke": smoke == "1"}
+     "runs": int(runs), "smoke": smoke == "1", "train_jobs": {"b0": int(b0_jobs), "v1": int(v1_jobs)}}
 with open(path + ".tmp", "w") as f:
     json.dump(m, f, indent=2)
 os.replace(path + ".tmp", path)
