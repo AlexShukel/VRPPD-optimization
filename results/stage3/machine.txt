@@ -12,4 +12,4 @@ Result: no P/E-core split visible; all cores within noise (about 1 %, one 5 % ou
 Decision: TIMED_CPUS=0,2,4,6,8,10 (one thread per reported physical core, no SMT siblings) in hosts/pingwin.env.
 
 Survival check: tmux session `probe` (sleep 600) started 09:19:48, no ssh connection from the Mac for 3 minutes (checked at 09:23:03, 3m15s later).
-Result: session still listed, uptime 9 min (WSL not restarted during the check). Note: WSL had been up only ~4 min when this task began, i.e. it was restarted before the task; keepalive is still recommended for long runs.
+Result: session still listed, uptime 9 min (WSL not restarted during the check). Note: WSL had been up only ~4 min when this task began, i.e. it was restarted before the task; keepalive is therefore MANDATORY for every later run (WSL can restart without notice).

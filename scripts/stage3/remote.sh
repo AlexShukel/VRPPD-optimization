@@ -2,7 +2,7 @@
 # Drive the Stage 3 compute host from the Mac.
 # Usage: remote.sh [--host <name>] bootstrap | sync | push-state | run <name> <command...>
 #                  | status | pull | watch | keepalive
-# Host settings live in scripts/stage3/hosts/<name>.env (default pingwin, or STAGE3_HOST).
+# bootstrap pushes the branch first (never main). Host settings live in scripts/stage3/hosts/<name>.env (default pingwin, or STAGE3_HOST).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/../.."
@@ -29,6 +29,8 @@ rsh_e() { echo "ssh ${SSH_OPTS[*]}"; }
 notify() { [[ -x "$NOTIFY" ]] && "$NOTIFY" "$1" >/dev/null 2>&1 || true; }
 
 cmd_bootstrap() {
+  # The server can only check out the branch once it is on GitHub (never pushes main).
+  git push origin "$BRANCH"
   # The unit tests read instances from problem-gen/problems (not in git): clone, rsync them, then build and test.
   rssh "REPO_URL=$REPO_URL REPO_DIR=$REPO_DIR BRANCH=$BRANCH bash -s" <<'REMOTE'
 set -euo pipefail
@@ -39,15 +41,14 @@ git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
 REMOTE
   rsync -a -e "$(rsh_e)" problem-gen/problems/ "$SSH_TARGET:$REPO_DIR/problem-gen/problems/"
-  rssh "REPO_URL=$REPO_URL REPO_DIR=$REPO_DIR BRANCH=$BRANCH TORCH_INDEX_URL=$TORCH_INDEX_URL bash -s" <<'REMOTE'
+  rssh "REPO_URL=$REPO_URL REPO_DIR=$REPO_DIR BRANCH=$BRANCH TORCH_INDEX_URL=$TORCH_INDEX_URL REQUIRE_CUDA=${REQUIRE_CUDA:-1} bash -s" <<'REMOTE'
 set -euo pipefail
 export PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH
 cd "$REPO_DIR"
 cargo build --release -p vrppd-lns
 [[ -d .venv ]] || uv venv .venv --python 3.12
-# CUDA torch first (from the CUDA wheel index), the rest from PyPI.
-uv pip install -p .venv/bin/python --index-url "$TORCH_INDEX_URL" --extra-index-url https://pypi.org/simple \
-  --index-strategy unsafe-best-match torch
+# torch comes from the CUDA wheel index (uv's default first-index strategy: PyPI cannot override it).
+uv pip install -p .venv/bin/python --index-url "$TORCH_INDEX_URL" --extra-index-url https://pypi.org/simple torch
 uv pip install -p .venv/bin/python -e python pytest maturin
 if [[ -f crates/vrppd-py/Cargo.toml ]]; then
   VIRTUAL_ENV="$PWD/.venv" .venv/bin/maturin develop --release -m crates/vrppd-py/Cargo.toml
@@ -60,7 +61,12 @@ if [[ -d python/tests ]]; then
 else
   echo "bootstrap: python/tests missing, skipping Python tests"
 fi
-.venv/bin/python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+REQUIRE_CUDA="$REQUIRE_CUDA" .venv/bin/python -c "
+import os, torch
+ok = torch.cuda.is_available()
+print(ok, torch.cuda.get_device_name(0) if ok else 'no GPU')
+assert ok or os.environ['REQUIRE_CUDA'] != '1', 'REQUIRE_CUDA=1 but torch.cuda.is_available() is False'
+"
 REMOTE
 }
 
@@ -112,15 +118,20 @@ cmd_watch() {
     done
     known="$(done_batches)"
     now=$(date +%s)
-    if rssh true 2>/dev/null && ! rssh "tmux has-session -t stage3" 2>/dev/null; then
+    if ! rssh true 2>/dev/null; then
+      echo "watch: $HOST unreachable at $(date '+%F %T')" >&2
+    elif ! rssh "tmux has-session -t stage3" 2>/dev/null; then
       remaining=""
       if rssh "test -x $REPO_DIR/scripts/stage3/run_all.sh" 2>/dev/null; then
         remaining="$(rssh "$REMOTE_PATH; cd $REPO_DIR && scripts/stage3/run_all.sh --list" 2>/dev/null || true)"
       fi
       if [[ -n "$remaining" ]] && (( now - last_restart >= 600 )); then
-        cmd_run stage3 "scripts/stage3/run_all.sh >> results/stage3/pipeline.log 2>&1" || true
         last_restart=$now
-        notify "stage3 queue restarted on $HOST ($(echo "$remaining" | wc -l | tr -d ' ') batches remain)"
+        if cmd_run stage3 "scripts/stage3/run_all.sh >> results/stage3/pipeline.log 2>&1"; then
+          notify "stage3 queue restarted on $HOST ($(echo "$remaining" | wc -l | tr -d ' ') batches remain)"
+        else
+          echo "watch: restart of stage3 failed on $HOST" >&2
+        fi
       fi
     fi
     sleep 600
