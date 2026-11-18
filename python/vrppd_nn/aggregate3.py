@@ -650,8 +650,9 @@ def fig_search_curves(df: pd.DataFrame, curves: dict, kind: str, path: str) -> b
 
 
 def fig_by_x(s: pd.DataFrame, panels: list[tuple[str, pd.DataFrame]], x: str, xlabel: str, path: str,
-             categorical: bool = False) -> bool:
-    """One panel per (title, subset of summary rows): mean gap against x, one line per operator."""
+             categorical: bool = False, ticks_at_values: bool = False) -> bool:
+    """One panel per (title, subset of summary rows): mean gap against x, one line per operator
+    (ticks_at_values: one x tick per value of x, e.g. the integer destroy sizes)."""
     panels = [(t, p) for t, p in panels if not p.empty]
     if not panels:
         return False
@@ -665,6 +666,8 @@ def fig_by_x(s: pd.DataFrame, panels: list[tuple[str, pd.DataFrame]], x: str, xl
             ax.plot(pos, q[metric].to_numpy(dtype=float), marker="o", ms=6, **_line(op))
         if categorical:
             ax.set_xticks(np.arange(len(xs)), xs)
+        elif ticks_at_values:
+            ax.set_xticks(xs, [f"{v:g}" for v in xs])
         ax.axhline(0, color="#52514e", lw=1, ls=":")
         _style(ax, title, xlabel, "gap to CEA reference (%)" if metric == "mean_gap_cea_pct" else "gap to best known (%)")
     axes[0][0].legend(frameon=False, fontsize=8)
@@ -880,7 +883,7 @@ def aggregate(root: str) -> None:
         # x = the recorded k; fractions giving the same k (identical runs) are drawn once
         ks = s[s.kind == "ksweep"].sort_values("k_frac").drop_duplicates(["cell", "operator", "k"])
         fig_by_x(ks, [(c, ks[ks.cell == c]) for c in _order(ks.cell, CELL_ORDER)], "k",
-                 "destroy size k (orders removed)", os.path.join(figdir, "k_sweep.png"))
+                 "destroy size k (orders removed)", os.path.join(figdir, "k_sweep.png"), ticks_at_values=True)
         lg = s[s.kind.isin(["iters", "time"]) & ~s.cell.isin(SMALL_CELLS)]
         fig_by_x(lg, [("iteration budget", lg[lg.kind == "iters"]), ("wall-time budget", lg[lg.kind == "time"])],
                  "cell", "class", os.path.join(figdir, "large_classes.png"), categorical=True)
