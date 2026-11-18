@@ -2,8 +2,11 @@
 
   python -m vrppd_nn.aggregate3 --root results/stage3
 
-Works on whatever batches are present: a missing batch leaves its tables and
-figures out, and summary.md starts with a coverage table. Layout read under --root:
+Works on whatever batches are finished: outputs of a batch without batches/<batch>/DONE
+(missing or still running) stay out of every table, figure and CSV, and summary.md
+starts with a coverage table. tables/ and figures/ are cleared first, so nothing from an
+earlier aggregation survives. Neural runs must use the tau of selection.json.
+Layout read under --root:
   batches/<batch>/manifest.json, DONE, STARTED, probe.json   (see BATCHES)
   lns/<group>/<operator>/<cell>/<instance>_s<seed>.json      LNS run files; groups:
       iters<N>, time<N>s, ksweep-k<frac>, objective_<price|empty>,
@@ -33,6 +36,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import sys
 
 import matplotlib
@@ -179,6 +183,24 @@ def add_gaps(runs: pd.DataFrame, refs: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def run_batch(kind: str, cell: str, objective: str) -> str:
+    """The batch of scripts/stage3/run_all.sh that writes runs of this kind, class and objective."""
+    if kind in ("select", "ksweep"):
+        return kind
+    if kind == "objective":
+        return f"obj-{objective}"
+    if cell in LARGE_CELLS:
+        return f"large-{cell}"
+    return f"{kind}-{cell}"  # iters-<cell>, time-<cell>
+
+
+def reference_batch(cell: str, objective: str) -> str:
+    """The batch that writes the CEA reference of this class and objective."""
+    if objective != "distance":
+        return f"obj-{objective}"
+    return f"large-{cell}" if cell in LARGE_CELLS else f"ref-{cell}"
+
+
 # ---------------------------------------------------------------- checks
 
 def check_timed_runs(runs: pd.DataFrame, refs: pd.DataFrame | None = None) -> None:
@@ -197,6 +219,23 @@ def check_timed_runs(runs: pd.DataFrame, refs: pd.DataFrame | None = None) -> No
             problems.append(f"class {cell} ({objective}): wall-time files come from more than one CPU setup: {desc}")
     if problems:
         raise ValueError("\n".join(problems))
+
+
+def check_neural_taus(runs: pd.DataFrame, selection: dict) -> None:
+    """Raise ValueError naming the run directory when a neural run of the main, k-sweep, large
+    or objective studies used another tau than selection.json gives its operator."""
+    expected = {"b0": selection["models"].get("b0", {}).get("tau"), "v1": selection["models"].get("v1", {}).get("tau"),
+                "v2": (selection.get("v2") or {}).get("tau"), "adaptive_n": selection["best_model"]["tau"]}
+    expected = {op: tau for op, tau in expected.items() if tau is not None}
+    neural = runs[runs.kind.isin(["iters", "time", "ksweep", "objective"]) & runs.operator.isin(list(expected))]
+    bad = []
+    for (group, op, cell), g in neural.groupby(["budget", "operator", "cell"]):
+        taus = g["tau"].astype(float)
+        wrong = ~np.isclose(taus, expected[op], rtol=0.0, atol=1e-12)
+        if wrong.any():
+            bad.append(f"lns/{group}/{op}/{cell}: tau {sorted(set(taus[wrong]))}, selection.json gives {expected[op]}")
+    if bad:
+        raise ValueError("neural runs do not use the selected tau (kept from an older selection?):\n" + "\n".join(bad))
 
 
 def _strings(obj):
@@ -322,11 +361,13 @@ def _read_json(path: str) -> dict:
         return json.load(f)
 
 
-def training_summary(root: str) -> pd.DataFrame:
-    """One row per trained model; for the seed runs of the best B0 and V1 configuration
-    also their mean and standard deviation."""
+def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
+    """One row per trained model of a finished batch (all batches when done is None); for the
+    seed runs of the best B0 and V1 configuration also their mean and standard deviation."""
     rows = []
     for family in ("b0", "v1"):
+        if done is not None and family not in done:
+            continue
         fdir = os.path.join(root, "models", family)
         best = _read_json(os.path.join(fdir, "best.json")) if os.path.exists(os.path.join(fdir, "best.json")) else {}
         fam_rows = {}
@@ -358,7 +399,7 @@ def training_summary(root: str) -> pd.DataFrame:
                 rows.append({"family": family, "group": stat, "name": f"{name} ({len(sdf)} seeds)", **values.to_dict()})
     for vdir in sorted(glob.glob(os.path.join(root, "models", "v2", "*"))):
         wpath = os.path.join(vdir, "weights.json")
-        if not os.path.exists(wpath):
+        if not os.path.exists(wpath) or (done is not None and f"v2-{os.path.basename(vdir)}" not in done):
             continue
         w = _read_json(wpath)
         tc = w.get("train_config", {})
@@ -428,7 +469,7 @@ def paired_tests(df: pd.DataFrame) -> pd.DataFrame:
             metric = _gap_metric(sub)
             per_inst = sub.groupby(["cell", "instance", "operator"])[metric].mean().unstack("operator")
             cells = _order(sub.cell, CELL_ORDER)
-            family = []
+            family = []  # per-instance means: pairs are matched by (cell, instance), never by row order
             for op in _order([o for o in per_inst.columns if o in NEURAL], OPERATORS):
                 for base in [b for b in BASELINES if b in per_inst.columns]:
                     for cell in cells + ["pooled"]:
@@ -441,7 +482,7 @@ def paired_tests(df: pd.DataFrame) -> pd.DataFrame:
                 row["p_holm"] = p_adj
             rows.extend(family)
     return pd.DataFrame(rows, columns=["study", "kind", "budget", "cell", "operator", "baseline", "metric", "n",
-                                       "median_diff", "p", "p_holm"])
+                                       "n_nonzero", "median_diff", "p", "p_holm"])
 
 
 def _tex(text) -> str:
@@ -581,9 +622,9 @@ def fig_loss_curves(fdir: str, groups: list[str], panel_of, label_of, path: str)
     return True
 
 
-def fig_v2(root: str, path: str) -> bool:
+def fig_v2(root: str, path: str, done: set[str]) -> bool:
     runs = [d for d in sorted(glob.glob(os.path.join(root, "models", "v2", "*")))
-            if os.path.exists(os.path.join(d, "train_log.csv"))]
+            if os.path.exists(os.path.join(d, "train_log.csv")) and f"v2-{os.path.basename(d)}" in done]
     if not runs:
         return False
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
@@ -637,15 +678,31 @@ def fig_trainsize(root: str, path: str) -> bool:
 
 def aggregate(root: str) -> None:
     figdir, tabdir = os.path.join(root, "figures"), os.path.join(root, "tables")
-    os.makedirs(figdir, exist_ok=True)
-    os.makedirs(tabdir, exist_ok=True)
+    for d in (figdir, tabdir):  # nothing from an earlier aggregation may survive
+        shutil.rmtree(d, ignore_errors=True)
+        os.makedirs(d)
+    for name in ("runs.csv", "summary.csv", "stats.csv", "training_summary.csv"):
+        if os.path.exists(os.path.join(root, name)):
+            os.remove(os.path.join(root, name))
     md = ["# Stage 3 summary", "", "## Coverage", ""]
     cov = batch_coverage(root)
     md += md_table(["batch", "status", "host", "finished"], cov.values.tolist())
+    md += ["Only batches marked done enter the tables, figures and CSV files below.", ""]
+    done = set(cov.loc[cov.status == "done", "batch"])
     notes = []
 
     refs = load_references3(root)
+    refs = refs[pd.Series([reference_batch(c, o) in done for c, o in zip(refs.cell, refs.objective)],
+                          index=refs.index, dtype=bool)]
     runs, curves = load_runs3(root, refs)
+    runs = runs[pd.Series([run_batch(k, c, o) in done for k, c, o in zip(runs.kind, runs.cell, runs.objective)],
+                          index=runs.index, dtype=bool)]
+    sel_path = os.path.join(root, "selection", "selection.json")
+    if os.path.exists(sel_path):
+        check_selection(sel_path)
+        check_neural_taus(runs, _read_json(sel_path))
+    elif runs.operator.isin(NEURAL).any():
+        notes.append("No selection/selection.json: the tau of the neural runs was not checked.")
     df = add_gaps(runs, refs)
     val_runs = runs[runs.split == "val"]
     pd.concat([df, val_runs], ignore_index=True).to_csv(os.path.join(root, "runs.csv"), index=False)
@@ -667,7 +724,7 @@ def aggregate(root: str) -> None:
             notes.append(f"Warning: {e}")
     df = df[~((df.kind == "time") & df.cell.isin(refused))]
     probe = os.path.join(root, "batches", "large-100_500", "probe.json")
-    if os.path.exists(probe):
+    if os.path.exists(probe) and "large-100_500" in done:
         p = _read_json(probe)
         notes.append(f"Class 100_500: a probe of the {p['operator']} operator ran at {p['iters_per_s']:.1f} it/s, so one "
                      f"{p['full_iters']}-iteration run takes about {p['projected_s']:.0f} s (limit {p['limit_s']} s); "
@@ -710,13 +767,14 @@ def aggregate(root: str) -> None:
         st = paired_tests(df)
         st.to_csv(os.path.join(root, "stats.csv"), index=False)
         if not st.empty:
-            rows = [[r.study, r.budget, r.cell, r.operator, r.baseline, r.n, f"{r.median_diff:+.3f}", f"{r.p:.2g}",
-                     f"{r.p_holm:.2g}"] for r in st.itertuples()]
+            rows = [[r.study, r.budget, r.cell, r.operator, r.baseline, r.n, r.n_nonzero, f"{r.median_diff:+.3f}",
+                     f"{r.p:.2g}", f"{r.p_holm:.2g}"] for r in st.itertuples()]
             md += ["## Paired tests", "",
                    "Wilcoxon signed-rank test over instances on per-instance mean gaps (column metric in stats.csv); "
                    "median difference = operator minus baseline in percentage points; Holm's correction within each "
                    "study and budget.", ""]
-            md += md_table(["study", "budget", "cell", "operator", "baseline", "n", "median diff", "p", "p (Holm)"], rows)
+            md += md_table(["study", "budget", "cell", "operator", "baseline", "n", "n non-zero", "median diff", "p",
+                            "p (Holm)"], rows)
             write_tex(os.path.join(tabdir, "stats.tex"), rows)
 
         fig_search_curves(df, curves, "iters", os.path.join(figdir, "search_curves_iters.png"))
@@ -731,9 +789,7 @@ def aggregate(root: str) -> None:
         fig_by_x(ob, [(o, ob[ob.objective == o]) for o in _order(ob.objective, ["price", "empty"])], "cell", "class",
                  os.path.join(figdir, "objectives.png"), categorical=True)
 
-    sel_path = os.path.join(root, "selection", "selection.json")
-    if os.path.exists(sel_path):
-        check_selection(sel_path)
+    if "select" in done and os.path.exists(sel_path):
         sel = _read_json(sel_path)
         rows = [[name, f"{m['tau']:g}", f"{m['mean_objective']:.2f}",
                  " ".join(f"{t}:{v:.1f}" for t, v in m["mean_objective_by_tau"].items())]
@@ -745,7 +801,7 @@ def aggregate(root: str) -> None:
         md += md_table(["model", "tau", "mean objective", "mean objective by tau"], rows)
         write_tex(os.path.join(tabdir, "selection.tex"), rows)
 
-    tr = training_summary(root)
+    tr = training_summary(root, done)
     if not tr.empty:
         tr.to_csv(os.path.join(root, "training_summary.csv"), index=False)
         md += ["## Training", ""]
@@ -774,17 +830,18 @@ def aggregate(root: str) -> None:
             md += ["### V2", ""] + md_table(["run", "start", "S", "beta", "parameters", "best val reward",
                                              "best episode", "episodes", "hours"], rows)
             write_tex(os.path.join(tabdir, "training_v2.tex"), rows)
-    fig_loss_curves(os.path.join(root, "models", "b0"), ["grid"],
+    fig_loss_curves(os.path.join(root, "models", "b0"), ["grid"] if "b0" in done else [],
                     lambda g, c: f"{c['loss']} loss, target {c.get('target', 'mean')}",
                     lambda c: f"w{c['width']} d{c['depth']}", os.path.join(figdir, "loss_curves_b0.png"))
-    fig_loss_curves(os.path.join(root, "models", "v1"), ["grid", "reg"],
+    fig_loss_curves(os.path.join(root, "models", "v1"), ["grid", "reg"] if "v1" in done else [],
                     lambda g, c: "model size" if g == "grid" else "regularisation of the best size",
                     lambda c: f"d{c['d']} n_att{c['n_att']} dropout {c['dropout']:g} wd {c['weight_decay']:g}",
                     os.path.join(figdir, "loss_curves_v1.png"))
-    fig_v2(root, os.path.join(figdir, "v2_training.png"))
-    fig_trainsize(root, os.path.join(figdir, "trainsize.png"))
+    fig_v2(root, os.path.join(figdir, "v2_training.png"), done)
+    if "b0" in done:
+        fig_trainsize(root, os.path.join(figdir, "trainsize.png"))
 
-    for sp in sorted(glob.glob(os.path.join(root, "label_stats", "stats_*.md"))):
+    for sp in sorted(glob.glob(os.path.join(root, "label_stats", "stats_*.md"))) if "data" in done else []:
         with open(sp) as f:
             md += [f"## Label quality ({os.path.basename(sp)})", "", f.read(), ""]
     write_atomic(os.path.join(root, "summary.md"), "\n".join(md) + "\n")

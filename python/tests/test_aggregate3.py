@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -76,12 +77,18 @@ def make_b0_batch(root):
     write_batch(root, "b0")
 
 
-def make_iters_batch(root, cell="10_10", n_instances=6, seeds=(1, 2)):
+def make_iters_batch(root, cell="10_10", n_instances=6, seeds=(1, 2), taus=None, done=True):
     for k, op in enumerate(CLASSICAL + NEURAL):
         for i in range(n_instances):
             for s in seeds:
-                write_run(root, "iters5000", op, cell, i, s + 1000 * i, best=100.0 + i + k * 0.5 + 0.1 * s)
-    write_batch(root, f"iters-{cell}")
+                write_run(root, "iters5000", op, cell, i, s + 1000 * i, best=100.0 + i + k * 0.5 + 0.1 * s,
+                          tau=(taus or {}).get(op, 0.0))
+    if done:
+        write_batch(root, f"iters-{cell}")
+    else:
+        os.makedirs(os.path.join(root, "batches", f"iters-{cell}"), exist_ok=True)
+        with open(os.path.join(root, "batches", f"iters-{cell}", "STARTED"), "w") as f:
+            f.write("h1 2026-11-20T10:00:00\n")
 
 
 def test_selection_uses_only_validation_files(tmp_path):
@@ -222,3 +229,86 @@ def test_pick_best_ranks_by_selection_value_of_one_metric(tmp_path):
     mixed = write_b0_model(root, "grid", "own_target", p_at_k=0.9, select_by="p_at_k")
     with pytest.raises(SystemExit, match="different metrics"):
         aggregate3.pick_best(dirs + [mixed])
+
+
+def test_unfinished_batches_stay_out_and_old_outputs_are_cleared(tmp_path):
+    root = str(tmp_path)
+    make_iters_batch(root, "10_10")
+    make_iters_batch(root, "10_20", done=False)  # still running: STARTED, no DONE
+    for d, name in (("tables", "old.tex"), ("figures", "old.png")):
+        os.makedirs(os.path.join(root, d))
+        open(os.path.join(root, d, name), "w").close()
+    aggregate3.main(["--root", root])
+    with open(os.path.join(root, "summary.md")) as f:
+        assert "| iters-10_20 | started | h1 |" in f.read()
+    for name in ("runs.csv", "summary.csv", "stats.csv"):
+        assert set(pd.read_csv(os.path.join(root, name))["cell"]) <= {"10_10", "pooled"}, name
+    with open(os.path.join(root, "tables", "main_iters.tex")) as f:
+        assert "10\\_20" not in f.read()
+    assert "old.tex" not in os.listdir(os.path.join(root, "tables"))
+    assert "old.png" not in os.listdir(os.path.join(root, "figures"))
+
+
+def test_neural_runs_must_use_selected_tau(tmp_path):
+    root = str(tmp_path)
+    selection = {"models": {"b0": {"tau": 0.5}, "v1": {"tau": 0.25}}, "v2": {"name": "v2-c", "tau": 1.0},
+                 "best_model": {"name": "v1", "operator": "v1", "tau": 0.25}}
+    write_json(os.path.join(root, "selection", "selection.json"), selection)
+    taus = {"b0": 0.5, "v1": 0.25, "v2": 1.0, "adaptive_n": 0.25}
+    make_iters_batch(root, taus=taus)
+    aggregate3.main(["--root", root])
+    make_iters_batch(root, taus=dict(taus, v1=0.1))  # runs kept from an older selection
+    with pytest.raises(ValueError, match="lns/iters5000/v1/10_10"):
+        aggregate3.main(["--root", root])
+
+
+def summary_frame(rows):
+    base = {"kind": "iters", "budget": "iters5000", "objective": "distance", "k_frac": np.nan, "cell": "10_10",
+            "operator": "random", "gap_best_pct": 0.0, "cea_best": 100.0, "best": 100.0, "iterations": 10,
+            "elapsed_ms": 1.0, "iters_per_s": 1.0, "reached_1pct": 1.0, "iters_to_1pct": 1.0, "secs_to_1pct": 1.0,
+            "accept_rate": 0.5, "destroy_share": 0.5, "valid": True}
+    return pd.DataFrame([{**base, **r} for r in rows])
+
+
+def test_summarise_separates_spread_over_instances_and_repeats():
+    # instance 0: repeats 1, 2, 3 (mean 2, sd 1); instance 1: 5, 5, 5 (mean 5, sd 0)
+    df = summary_frame([{"instance": str(i), "gap_cea_pct": g} for i, gaps in ((0, (1, 2, 3)), (1, (5, 5, 5)))
+                        for g in gaps])
+    r = aggregate3.summarise(df).iloc[0]
+    assert r.runs == 6 and r.instances == 2
+    assert r.mean_gap_cea_pct == pytest.approx(3.5)
+    assert r.sd_inst_gap_cea_pct == pytest.approx(np.std([2, 5], ddof=1))
+    assert r.sd_rep_gap_cea_pct == pytest.approx(0.5)
+
+
+def test_paired_tests_pair_by_instance():
+    def rows(op, instances, offset):
+        return [{"operator": op, "instance": str(i), "gap_cea_pct": i + offset + 0.01 * rep}
+                for i in instances for rep in (0, 1)]
+    # b0 has instances 0..5, random 1..6, adaptive 0..6: b0 pairs with random on 1..5, with adaptive on 0..5
+    df = summary_frame(rows("b0", range(6), 0.5) + rows("random", range(1, 7), 0.0) + rows("adaptive", range(7), 1.0))
+    first = aggregate3.paired_tests(df)
+    shuffled = aggregate3.paired_tests(df.sample(frac=1.0, random_state=3))
+    pd.testing.assert_frame_equal(first, shuffled)
+    got = first.set_index(["cell", "baseline"])
+    assert got.loc[("10_10", "random"), "n"] == 5 and got.loc[("10_10", "random"), "n_nonzero"] == 5
+    assert got.loc[("10_10", "random"), "median_diff"] == pytest.approx(0.5)
+    assert got.loc[("10_10", "adaptive"), "n"] == 6
+    assert got.loc[("10_10", "adaptive"), "median_diff"] == pytest.approx(-0.5)
+
+
+def test_aggregate_refuses_wall_time_table_of_mixed_host_class(tmp_path):
+    root = str(tmp_path)
+    timed = dict(budget_iters=None, budget_secs=60.0, threads=6, cpu_list="0,2,4,6,8,10")
+    for cell, hosts in (("10_10", {"random": "h1", "adaptive": "h2"}), ("10_20", {"random": "h1", "adaptive": "h1"})):
+        for op, host in hosts.items():
+            for i in range(3):
+                write_run(root, "time60s", op, cell, i, 1 + 1000 * i, best=100.0 + i, host=host, **timed)
+        write_batch(root, f"time-{cell}")
+    aggregate3.main(["--root", root])
+    with open(os.path.join(root, "summary.md")) as f:
+        assert "Refused the wall-time table of class 10_10" in f.read()
+    with open(os.path.join(root, "tables", "main_time.tex")) as f:
+        table = f.read()
+    assert "10\\_20" in table and "10\\_10" not in table
+    assert set(pd.read_csv(os.path.join(root, "summary.csv"))["cell"]) == {"10_20"}

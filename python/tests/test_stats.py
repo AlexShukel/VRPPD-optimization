@@ -16,7 +16,7 @@ def test_holm_caps_at_one_and_keeps_order():
 def test_wilcoxon_identical_samples_gives_p_one():
     a = np.linspace(1.0, 2.0, 12)
     r = stats.paired_wilcoxon(a, a.copy())
-    assert r["n"] == 12
+    assert r["n"] == 12 and r["n_nonzero"] == 0
     assert r["median_diff"] == 0.0
     assert r["p"] == 1.0
 
@@ -25,7 +25,7 @@ def test_wilcoxon_shifted_samples_small_p():
     rng = np.random.default_rng(0)
     b = rng.normal(100.0, 10.0, size=20)
     r = stats.paired_wilcoxon(b + 0.5, b)
-    assert r["n"] == 20
+    assert r["n"] == 20 and r["n_nonzero"] == 20
     assert r["median_diff"] == pytest.approx(0.5)
     assert r["p"] < 0.001
 

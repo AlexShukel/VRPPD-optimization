@@ -8,7 +8,8 @@ from scipy.stats import wilcoxon
 def paired_wilcoxon(a: np.ndarray, b: np.ndarray) -> dict:
     """Two-sided Wilcoxon signed-rank test of a - b over the pairs where both values
     exist. Zero differences are dropped (scipy's default); p = 1.0 when every
-    difference is zero. Returns n (pairs used), median_diff (median of a - b) and p."""
+    difference is zero. Returns n (pairs used), n_nonzero (pairs with a non-zero difference, the
+    ones the test ranks), median_diff (median of a - b) and p."""
     a = np.asarray(a, dtype=float)
     b = np.asarray(b, dtype=float)
     if a.shape != b.shape:
@@ -16,9 +17,9 @@ def paired_wilcoxon(a: np.ndarray, b: np.ndarray) -> dict:
     keep = ~(np.isnan(a) | np.isnan(b))
     d = a[keep] - b[keep]
     if d.size == 0:
-        return {"n": 0, "median_diff": float("nan"), "p": float("nan")}
+        return {"n": 0, "n_nonzero": 0, "median_diff": float("nan"), "p": float("nan")}
     p = 1.0 if np.all(d == 0) else float(wilcoxon(d).pvalue)
-    return {"n": int(d.size), "median_diff": float(np.median(d)), "p": p}
+    return {"n": int(d.size), "n_nonzero": int(np.count_nonzero(d)), "median_diff": float(np.median(d)), "p": p}
 
 
 def holm(pvalues: list[float]) -> list[float]:
