@@ -74,7 +74,8 @@ pub struct CurveRow {
   pub accepted: bool,
 }
 
-fn distance_name() -> String {
+/// Serde default for the `objective` field of files written before it existed.
+pub fn distance_name() -> String {
   objective_name(Objective::Distance).to_string()
 }
 
@@ -256,13 +257,21 @@ pub fn run_lns(
 
   let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
   let valid = best.is_valid(ctx.problem);
+  // Report totals recalculated from scratch rather than the incrementally
+  // tracked ones.
+  best.recalculate_all(ctx.problem, &ctx.order_mat, &ctx.vstart_mat);
+  let recomputed_obj = ctx.objective_value(&best);
+  debug_assert!(
+    (best_obj - recomputed_obj).abs() <= 1e-6 * recomputed_obj.abs().max(1.0),
+    "tracked best objective {best_obj} differs from recomputed {recomputed_obj}"
+  );
   LnsResult {
     operator: op.name().to_string(),
     objective: objective_name(ctx.objective).to_string(),
     seed: cfg.seed,
     k,
     initial: initial_obj,
-    best: best_obj,
+    best: recomputed_obj,
     best_distance: best.total_distance,
     best_price: best.total_price,
     best_empty: best.empty_distance,
@@ -289,15 +298,14 @@ fn shuffle<T>(v: &mut [T], rng: &mut Xoshiro256StarStar) {
   }
 }
 
-/// Start solution: the thesis' RSCIM construction with the given seed (built
-/// for distance whatever the context's objective, so every objective starts
-/// from the same solution).
+/// Start solution: the thesis' RSCIM construction with the given seed, built
+/// for the context's objective (like the coevolutionary reference).
 pub fn initial_solution(ctx: &Context, seed: u64) -> WorkingSolution {
   vrppd_cea::generate_rscim_seeded(
     ctx.problem,
     &ctx.order_mat,
     &ctx.vstart_mat,
-    Objective::Distance,
+    ctx.objective,
     seed,
   )
 }
@@ -429,18 +437,14 @@ mod tests {
     let res = run_lns(&ctx, initial_solution(&ctx, 1), op.as_mut(), &cfg, None);
     assert_eq!(res.objective, "distance");
     assert_eq!(res.best_distance, res.best);
-    // The distance matrix comes from the platform libm (sin, cos, acos), which
-    // may differ in the last bit on other platforms, so only the recording
-    // platform demands bit equality.
-    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-      assert_eq!(res.best, RECORDED_DISTANCE_BEST);
-    } else {
-      assert!(
-        (res.best - RECORDED_DISTANCE_BEST).abs() <= 1e-9 * RECORDED_DISTANCE_BEST,
-        "best {} vs recorded {RECORDED_DISTANCE_BEST}",
-        res.best
-      );
-    }
+    // `best` is the from-scratch evaluation of the best solution, which
+    // differs from the incrementally tracked value in the last bits, so this
+    // compares with a tolerance (the recorded value itself is unchanged).
+    assert!(
+      (res.best - RECORDED_DISTANCE_BEST).abs() <= 1e-9 * RECORDED_DISTANCE_BEST,
+      "best {} vs recorded {RECORDED_DISTANCE_BEST}",
+      res.best
+    );
   }
 
   fn assert_tracks_recomputed_value(objective: Objective, name: &str) {
@@ -458,11 +462,11 @@ mod tests {
     assert!((res.best_distance - sol.total_distance).abs() < 1e-6);
     assert!((res.best_price - sol.total_price).abs() < 1e-6);
     assert!((res.best_empty - sol.empty_distance).abs() < 1e-6);
-    let ctx = Context::new(&problem);
+    let ctx = Context::with_objective(&problem, objective);
     let init = initial_solution(&ctx, 5);
     assert!((res.initial - value_of(objective, &init)).abs() < 1e-6);
     assert!(res.best < res.initial, "{name}: no improvement");
-    assert_eq!(res.curve.last().unwrap().best, res.best);
+    assert!((res.curve.last().unwrap().best - res.best).abs() < 1e-6);
   }
 
   #[test]
@@ -529,6 +533,37 @@ mod tests {
     assert_eq!(run(None, Some(0.5)), 10);
     assert_eq!(run(Some(4), Some(0.5)), 4);
     assert_eq!(run(None, None), default_k(20));
+  }
+
+  #[test]
+  fn initial_solution_uses_context_objective() {
+    let problem = load_problem("10_20", 0);
+    for objective in [Objective::Price, Objective::Empty] {
+      let ctx = Context::with_objective(&problem, objective);
+      let want = vrppd_cea::generate_rscim_seeded(
+        ctx.problem,
+        &ctx.order_mat,
+        &ctx.vstart_mat,
+        objective,
+        7,
+      );
+      let got = initial_solution(&ctx, 7);
+      assert_eq!(got.total_price, want.total_price);
+      assert_eq!(got.empty_distance, want.empty_distance);
+      assert_eq!(got.total_distance, want.total_distance);
+    }
+  }
+
+  #[test]
+  fn reported_totals_are_recomputed_from_scratch() {
+    let problem = load_problem("10_20", 0);
+    let res = run_with(&problem, Objective::Price, 300, 5);
+    let sol = recompute(&problem, &res.best_routes);
+    // Bit equality: the result carries the from-scratch evaluation.
+    assert_eq!(res.best, sol.total_price);
+    assert_eq!(res.best_price, sol.total_price);
+    assert_eq!(res.best_distance, sol.total_distance);
+    assert_eq!(res.best_empty, sol.empty_distance);
   }
 
   #[test]

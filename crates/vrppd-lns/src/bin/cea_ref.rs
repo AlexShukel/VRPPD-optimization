@@ -39,17 +39,13 @@ struct Args {
   max_instances: Option<usize>,
 }
 
-fn distance_name() -> String {
-  objective_name(Objective::Distance).to_string()
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 struct RefRecord {
   cell: String,
   instance: String,
   /// Objective of `runs` and `best`; files written before the field existed
   /// are distance references.
-  #[serde(default = "distance_name")]
+  #[serde(default = "vrppd_lns::distance_name")]
   objective: String,
   n_orders: usize,
   n_vehicles: usize,
@@ -78,6 +74,14 @@ fn main() {
     .unwrap_or_default();
   let threads = args.threads.clamp(1, 6);
   let objective = objective_name(args.objective);
+  if let Some(other) = records.iter().find(|r| r.objective != objective) {
+    eprintln!(
+      "{} holds '{}' records but --objective is '{objective}'; use another --out",
+      args.out.display(),
+      other.objective
+    );
+    std::process::exit(1);
+  }
   eprintln!(
     "cea_ref: cell={cell} objective={objective} instances={} runs={} seconds={} threads={threads}",
     instances.len(),

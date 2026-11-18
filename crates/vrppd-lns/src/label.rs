@@ -6,7 +6,7 @@ use rand::SeedableRng;
 use rand::seq::SliceRandom;
 use rand_xoshiro::Xoshiro256StarStar;
 use serde::{Deserialize, Serialize};
-use vrppd_core::{StopKind, WorkingSolution};
+use vrppd_core::{Objective, StopKind, WorkingSolution};
 
 use crate::destroy::RandomDestroy;
 use crate::features::compute_features;
@@ -150,6 +150,10 @@ pub fn label_state(
   top_frac: f64,
   rng: &mut Xoshiro256StarStar,
 ) -> StateLabels {
+  debug_assert!(
+    ctx.objective == Objective::Distance,
+    "labels are distance-only"
+  );
   let n = ctx.n_orders();
   let mut sum = vec![0.0; n];
   let mut counts = vec![0u32; n];
@@ -203,6 +207,10 @@ pub fn label_instance(
   split: &str,
   cfg: &LabelConfig,
 ) -> Vec<LabelledState> {
+  debug_assert!(
+    ctx.objective == Objective::Distance,
+    "labels are distance-only"
+  );
   let n = ctx.n_orders();
   let k = cfg.k.unwrap_or_else(|| default_k(n)).min(n.max(1));
   let snap_iters = snapshot_iterations(cfg.lns_iters, cfg.states_per_instance, &cfg.schedule);
@@ -306,6 +314,33 @@ mod tests {
       assert_eq!(total, 24);
       assert_eq!(s.top_share.len(), 20);
     }
+  }
+
+  #[cfg(debug_assertions)]
+  #[test]
+  #[should_panic(expected = "labels are distance-only")]
+  fn labels_refuse_non_distance_context() {
+    let dir =
+      std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../problem-gen/problems/10_10");
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+      .unwrap()
+      .filter_map(|e| e.ok())
+      .map(|e| e.path())
+      .collect();
+    files.sort();
+    let problem: Problem =
+      serde_json::from_str(&std::fs::read_to_string(&files[0]).unwrap()).unwrap();
+    let ctx = Context::with_objective(&problem, Objective::Price);
+    let cfg = LabelConfig {
+      lns_iters: 10,
+      states_per_instance: 1,
+      m: 2,
+      k: None,
+      seed: 1,
+      schedule: "even".to_string(),
+      top_frac: 0.1,
+    };
+    label_instance(&ctx, "x", "10_10", "train", &cfg);
   }
 
   #[test]

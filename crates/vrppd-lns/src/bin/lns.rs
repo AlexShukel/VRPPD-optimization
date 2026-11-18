@@ -2,7 +2,7 @@
 //! with `--repeats` seeds, writing a JSON result and a CSV search curve per run.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Parser;
@@ -11,7 +11,8 @@ use serde::Serialize;
 use vrppd_core::Objective;
 use vrppd_lns::io::{cell_name, init_threads, load_instances, resolve_cell_dir};
 use vrppd_lns::{
-  Context, LnsConfig, build_operator, initial_solution, objective_name, parse_objective, run_lns,
+  Context, LnsConfig, build_operator, distance_name, initial_solution, objective_name,
+  parse_objective, run_lns,
 };
 
 #[derive(Parser, Debug)]
@@ -85,6 +86,19 @@ struct RunFile<'a> {
   result: &'a vrppd_lns::LnsResult,
 }
 
+/// Objective recorded in an existing result file (None if there is no
+/// readable file; files from before the field existed are distance runs).
+fn existing_objective(path: &Path) -> Option<String> {
+  let text = fs::read_to_string(path).ok()?;
+  let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+  Some(
+    value
+      .get("objective")
+      .and_then(|o| o.as_str())
+      .map_or_else(distance_name, str::to_string),
+  )
+}
+
 fn main() {
   let args = Args::parse();
   let threads = init_threads(args.threads, 20);
@@ -142,6 +156,22 @@ fn main() {
     cfg_base.max_iters,
     cfg_base.max_secs
   );
+  if !args.force {
+    for &(i, r) in &jobs {
+      let seed = args.seed + 1000 * i as u64 + r as u64;
+      let path = args.out.join(format!("{}_s{}.json", instances[i].id, seed));
+      if let Some(found) = existing_objective(&path) {
+        if found != objective_name(args.objective) {
+          eprintln!(
+            "{} holds a '{found}' run but --objective is '{}'; use another --out or --force",
+            path.display(),
+            objective_name(args.objective)
+          );
+          std::process::exit(1);
+        }
+      }
+    }
+  }
   let started = Instant::now();
   let done: usize = jobs
     .par_iter()
