@@ -84,16 +84,31 @@ impl Params {
   }
 }
 
-/// c += a b for row-major a (m x k), b (k x n) and c (m x n). The inner loop
-/// runs along a row of b and c, so it vectorises.
-fn matmul(a: &[f32], b: &[f32], c: &mut [f32], m: usize, k: usize, n: usize) {
-  debug_assert!(a.len() >= m * k && b.len() >= k * n && c.len() >= m * n);
-  for (a_row, c_row) in a.chunks_exact(k).zip(c.chunks_exact_mut(n)).take(m) {
-    for (&x, b_row) in a_row.iter().zip(b.chunks_exact(n)) {
-      for (cv, &bv) in c_row.iter_mut().zip(b_row) {
-        *cv += x * bv;
-      }
-    }
+/// c = a b + beta c for row-major a (m x k), b (k x n) and c (m x n), with
+/// beta 0 (c is overwritten without being read) or 1 (accumulate).
+/// matrixmultiply picks its SIMD kernel (AVX2/FMA, NEON) at run time.
+#[allow(clippy::too_many_arguments)]
+fn matmul(a: &[f32], b: &[f32], c: &mut [f32], m: usize, k: usize, n: usize, beta: f32) {
+  assert!(a.len() >= m * k && b.len() >= k * n && c.len() >= m * n);
+  // SAFETY: with unit column strides and row strides k, n and n, sgemm reads
+  // a[..m*k] and b[..k*n] and writes c[..m*n], all in bounds by the assert.
+  unsafe {
+    matrixmultiply::sgemm(
+      m,
+      k,
+      n,
+      1.0,
+      a.as_ptr(),
+      k as isize,
+      1,
+      b.as_ptr(),
+      n as isize,
+      1,
+      beta,
+      c.as_mut_ptr(),
+      n as isize,
+      1,
+    );
   }
 }
 
@@ -109,17 +124,53 @@ fn relu(x: &mut [f32]) {
   }
 }
 
-fn softmax(x: &mut [f32]) {
-  let max = x.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-  let mut sum = 0.0;
-  for v in x.iter_mut() {
-    *v = (*v - max).exp();
-    sum += *v;
+/// e^x for x <= 0 with the Cephes `expf` reduction and polynomial (about
+/// 1 ulp), written without a libm call so that loops over it vectorise.
+/// Arguments below -87 are clamped (e^-87 is about 1.6e-38).
+#[inline(always)]
+fn exp_nonpos(x: f32) -> f32 {
+  const ROUND: f32 = 12_582_912.0; // 1.5 * 2^23: adding and subtracting it rounds to an integer
+  let x = x.max(-87.0);
+  let n = (x * std::f32::consts::LOG2_E + ROUND) - ROUND;
+  let r = x - n * 0.693_359_4 - n * -2.121_944_4e-4; // x - n ln 2, ln 2 split in two parts
+  let p = 1.987_569_1e-4;
+  let p = p * r + 1.398_199_9e-3;
+  let p = p * r + 8.333_452e-3;
+  let p = p * r + 4.166_579_6e-2;
+  let p = p * r + 1.666_666_5e-1;
+  let p = p * r + 0.5;
+  // 2^n with n in -126..=0 is a normal float, built from its exponent bits.
+  (p * r * r + r + 1.0) * f32::from_bits(((n as i32 + 127) as u32) << 23)
+}
+
+/// Replace a row of attention scores by exp(score - row max) and return their
+/// sum: softmax numerators and denominator.
+fn exp_shifted(x: &mut [f32]) -> f32 {
+  const LANES: usize = 8; // independent accumulators, so the reductions vectorise
+  let mut lanes = [f32::NEG_INFINITY; LANES];
+  let chunks = x.chunks_exact(LANES);
+  let max = chunks
+    .remainder()
+    .iter()
+    .fold(f32::NEG_INFINITY, |m, &v| m.max(v));
+  for chunk in chunks {
+    for (l, &v) in lanes.iter_mut().zip(chunk) {
+      *l = l.max(v);
+    }
   }
-  let inv = 1.0 / sum;
+  let max = lanes.iter().fold(max, |m, &v| m.max(v));
   for v in x.iter_mut() {
-    *v *= inv;
+    *v = exp_nonpos(*v - max);
   }
+  let mut sums = [0.0_f32; LANES];
+  let chunks = x.chunks_exact(LANES);
+  let tail: f32 = chunks.remainder().iter().sum();
+  for chunk in chunks {
+    for (s, &v) in sums.iter_mut().zip(chunk) {
+      *s += v;
+    }
+  }
+  sums.iter().sum::<f32>() + tail
 }
 
 struct Linear {
@@ -174,7 +225,7 @@ impl Linear {
   /// y = x W^T + b for x (rows x n_in); y becomes rows x n_out.
   fn forward(&self, x: &[f32], rows: usize, y: &mut Vec<f32>) {
     self.init(rows, y);
-    matmul(x, &self.wt, y, rows, self.n_in, self.n_out);
+    matmul(x, &self.wt, y, rows, self.n_in, self.n_out, 1.0);
   }
 
   /// y = [a ; b] W^T + bias for a, b (rows x n_in/2 each), without building the concatenation.
@@ -182,8 +233,8 @@ impl Linear {
     let half = self.n_in / 2;
     self.init(rows, y);
     let (wa, wb) = self.wt.split_at(half * self.n_out);
-    matmul(a, wa, y, rows, half, self.n_out);
-    matmul(b, wb, y, rows, half, self.n_out);
+    matmul(a, wa, y, rows, half, self.n_out, 1.0);
+    matmul(b, wb, y, rows, half, self.n_out, 1.0);
   }
 }
 
@@ -250,12 +301,14 @@ impl AttentionBlock {
     self.q.forward(h, t, &mut b.q);
     self.k.forward(h, t, &mut b.k);
     self.v.forward(h, t, &mut b.v);
-    b.att.clear();
+    // Every element of these is written before it is read.
     b.att.resize(t * d, 0.0);
     b.qh.resize(t * dh, 0.0);
     b.kt.resize(dh * t, 0.0);
     b.vh.resize(t * dh, 0.0);
-    b.row.resize(t, 0.0);
+    b.scores.resize(t * t, 0.0);
+    b.out.resize(t * dh, 0.0);
+    b.sums.resize(t, 0.0);
     for j in 0..heads {
       // Head j's slices of q (pre-scaled), k (transposed: dh x t) and v.
       let off = j * dh;
@@ -266,12 +319,18 @@ impl AttentionBlock {
           b.vh[s * dh + c] = b.v[s * d + off + c];
         }
       }
-      for r in 0..t {
-        b.row.fill(0.0);
-        matmul(&b.qh[r * dh..(r + 1) * dh], &b.kt, &mut b.row, 1, dh, t);
-        softmax(&mut b.row);
-        let out = &mut b.att[r * d + off..r * d + off + dh];
-        matmul(&b.row, &b.vh, out, 1, t, dh);
+      // Softmax numerators times v; dividing the t x dh product by the row
+      // sums afterwards is cheaper than normalising the t x t weights.
+      matmul(&b.qh, &b.kt, &mut b.scores, t, dh, t, 0.0);
+      for (row, sum) in b.scores.chunks_exact_mut(t).zip(&mut b.sums) {
+        *sum = exp_shifted(row);
+      }
+      matmul(&b.scores, &b.vh, &mut b.out, t, t, dh, 0.0);
+      for (r, (out, sum)) in b.out.chunks_exact(dh).zip(&b.sums).enumerate() {
+        let inv = 1.0 / sum;
+        for (a, o) in b.att[r * d + off..r * d + off + dh].iter_mut().zip(out) {
+          *a = o * inv;
+        }
       }
     }
     self.o.forward(&b.att, t, &mut b.tmp);
@@ -297,6 +356,10 @@ struct Buffers {
   qh: Vec<f32>,
   kt: Vec<f32>,
   vh: Vec<f32>,
+  /// Attention weights of one head, t x t.
+  scores: Vec<f32>,
+  out: Vec<f32>,
+  sums: Vec<f32>,
   row: Vec<f32>,
   counts: Vec<f32>,
 }
@@ -608,6 +671,24 @@ mod tests {
       }
     }
     sol
+  }
+
+  #[test]
+  fn exp_nonpos_matches_std_exp() {
+    let mut worst = 0.0_f32;
+    for i in 0..=870_000 {
+      let x = -(i as f32) * 1e-4;
+      let (got, want) = (exp_nonpos(x), x.exp());
+      worst = worst.max((got - want).abs() / want);
+    }
+    assert!(worst < 5e-7, "max relative error {worst}");
+    let mut row = [0.5_f32, -3.0, 2.0, 2.0, -80.0, 0.0, 1.0, -1.5, 0.25];
+    let want: Vec<f32> = row.iter().map(|v| (v - 2.0_f32).exp()).collect();
+    let sum = exp_shifted(&mut row);
+    assert!((sum - want.iter().sum::<f32>()).abs() < 1e-6);
+    for (g, w) in row.iter().zip(&want) {
+      assert!((g - w).abs() <= 1e-6 * w.max(1e-30), "{g} vs {w}");
+    }
   }
 
   #[test]
