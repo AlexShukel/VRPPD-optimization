@@ -37,6 +37,13 @@ struct Args {
   out: PathBuf,
   #[arg(long)]
   max_instances: Option<usize>,
+  /// Machine name written into every new record as `host` (pipeline bookkeeping).
+  #[arg(long, default_value = "")]
+  host_tag: String,
+  /// CPU list the process is pinned to (e.g. the taskset list), written into
+  /// every new record as `cpu_list`.
+  #[arg(long, default_value = "")]
+  cpu_list: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -54,6 +61,14 @@ struct RefRecord {
   generations: Vec<u64>,
   exit_reasons: Vec<String>,
   best: f64,
+  /// Machine, CEA threads and CPU list of the runs; empty / 0 in files written
+  /// before these fields existed.
+  #[serde(default)]
+  host: String,
+  #[serde(default)]
+  threads: usize,
+  #[serde(default)]
+  cpu_list: String,
 }
 
 fn main() {
@@ -106,6 +121,9 @@ fn main() {
       generations: Vec::new(),
       exit_reasons: Vec::new(),
       best: f64::INFINITY,
+      host: args.host_tag.clone(),
+      threads,
+      cpu_list: args.cpu_list.clone(),
     };
     for r in 0..args.runs {
       let seed = args.seed.wrapping_mul(1_000_003).wrapping_add(r as u64) ^ (inst.id.len() as u64);

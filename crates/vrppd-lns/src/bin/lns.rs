@@ -71,6 +71,13 @@ struct Args {
   /// Re-run even if the result file already exists (default: skip existing).
   #[arg(long, default_value_t = false)]
   force: bool,
+  /// Machine name written into every run file as `host` (pipeline bookkeeping).
+  #[arg(long, default_value = "")]
+  host_tag: String,
+  /// CPU list the process is pinned to (e.g. the taskset list), written into
+  /// every run file as `cpu_list`.
+  #[arg(long, default_value = "")]
+  cpu_list: String,
 }
 
 #[derive(Serialize)]
@@ -82,6 +89,10 @@ struct RunFile<'a> {
   budget_iters: Option<u64>,
   budget_secs: Option<f64>,
   tau: f64,
+  host: &'a str,
+  /// Worker threads of the run's process (runs execute in parallel, one per thread).
+  threads: usize,
+  cpu_list: &'a str,
   #[serde(flatten)]
   result: &'a vrppd_lns::LnsResult,
 }
@@ -213,6 +224,9 @@ fn main() {
         budget_iters: cfg.max_iters,
         budget_secs: cfg.max_secs,
         tau: args.tau,
+        host: &args.host_tag,
+        threads,
+        cpu_list: &args.cpu_list,
         result: &res,
       };
       let tmp = args.out.join(format!("{stem}.json.tmp"));
