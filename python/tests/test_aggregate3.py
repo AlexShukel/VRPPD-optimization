@@ -47,7 +47,7 @@ def write_batch(root, batch, host="h1"):
 
 
 def write_b0_model(root, sub, name, *, width=64, depth=2, loss="mse", target="mean", seed=0, p_at_k=0.3,
-                   train_instances=None, select_by="best_try"):
+                   train_instances=None, select_by="best_try", old_style=False):
     d = os.path.join(root, "models", "b0", sub, name)
     write_json(os.path.join(d, "config.json"), {"width": width, "depth": depth, "loss": loss, "target": target,
                                                 "seed": seed, "dropout": 0.1, "weight_decay": 1e-4,
@@ -58,6 +58,12 @@ def write_b0_model(root, sub, name, *, width=64, depth=2, loss="mse", target="me
                                                  "selection_value": p_at_k, "select_by": select_by,
                                                  "n_train_states": 100, "n_val_states": 20, "threads": 4,
                                                  "peak_rss_mb": 512.0})
+    if old_style:  # trained before threads and peak_rss_mb were recorded
+        path = os.path.join(d, "metrics.json")
+        with open(path) as f:
+            m = json.load(f)
+        del m["threads"], m["peak_rss_mb"]
+        write_json(path, m)
     write_json(os.path.join(d, "weights.json"), {"layers": []})
     with open(os.path.join(d, "loss_curve.csv"), "w") as f:
         f.write("epoch,train_loss,val_loss,val_spearman,val_p_at_k\n1,1.0,1.1,0.1,0.2\n2,0.9,1.0,0.2,0.3\n")
@@ -346,3 +352,18 @@ def test_training_summary_keeps_every_finished_v2_run(tmp_path):
     assert pd.read_csv(os.path.join(root, "training_summary.csv"))["name"].tolist() == ["v2-a", "v2-b", "v2-c"]
     with open(os.path.join(root, "tables", "training_v2.tex")) as f:
         assert [line.split(" & ")[0] for line in f.read().splitlines()] == ["v2-a", "v2-b", "v2-c"]
+
+
+@pytest.mark.parametrize("styles", [("old", "new"), ("old", "old")])
+def test_training_summary_tolerates_metrics_without_threads_or_memory(tmp_path, styles):
+    root = str(tmp_path)
+    for seed, style in enumerate(styles):
+        sub, name = ("grid", "w64_d2_mse_mean_s0") if seed == 0 else ("seeds", f"w64_d2_mse_mean_s{seed}")
+        write_b0_model(root, sub, name, seed=seed, old_style=style == "old")
+    write_json(os.path.join(root, "models", "b0", "best.json"),
+               {"best": "grid/w64_d2_mse_mean_s0", "seeds": ["grid/w64_d2_mse_mean_s0", "seeds/w64_d2_mse_mean_s1"]})
+    t = aggregate3.training_summary(root).set_index("group")
+    assert np.isnan(t.loc["grid", "peak_rss_mb"]) and np.isnan(t.loc["grid", "threads"])
+    expected = 512.0 if styles[1] == "new" else np.nan
+    np.testing.assert_equal(t.loc["seeds", "peak_rss_mb"], expected)
+    np.testing.assert_equal(t.loc["seeds mean", "peak_rss_mb"], expected)  # pandas mean skips the missing value
