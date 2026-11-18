@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Drive the Stage 3 compute host from the Mac.
-# Usage: remote.sh [--host <name>] bootstrap | sync | push-state | run <name> <command...>
+# Usage: remote.sh [--host <name>] bootstrap | sync | push-state | run <name> '<command>'
 #                  | status | pull | watch | keepalive
 # bootstrap pushes the branch first (never main). Host settings live in scripts/stage3/hosts/<name>.env (default pingwin, or STAGE3_HOST).
+# run takes the command as ONE string (quote it); it runs in tmux session <name> with STAGE3_HOST exported.
+# SMOKE=1 makes status, pull, push-state and watch use results/stage3-smoke and the smoke queue
+# (notifications prefixed "[stage3 test]"); WATCH_INTERVAL sets watch's period in seconds (default 600).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/../.."
@@ -22,16 +25,27 @@ BRANCH=feat/neural-lns-stage3
 REPO_URL=https://github.com/AlexShukel/VRPPD-optimization.git
 REMOTE_PATH='export PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH'
 NOTIFY="$HOME/Git/halo/scripts/notify-telegram.sh"
+if [[ "${SMOKE:-0}" == 1 ]]; then
+  ROOT=results/stage3-smoke QUEUE="SMOKE=1 scripts/stage3/run_all.sh" NOTIFY_PREFIX="[stage3 test] "
+else
+  ROOT=results/stage3 QUEUE="scripts/stage3/run_all.sh" NOTIFY_PREFIX=""
+fi
+WATCH_INTERVAL="${WATCH_INTERVAL:-600}"
 SSH_OPTS=(-o BatchMode=yes -o ConnectTimeout=15)
 
 rssh() { ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$@"; }
 rsh_e() { echo "ssh ${SSH_OPTS[*]}"; }
-notify() { [[ -x "$NOTIFY" ]] && "$NOTIFY" "$1" >/dev/null 2>&1 || true; }
+notify() { [[ -x "$NOTIFY" ]] && "$NOTIFY" "$NOTIFY_PREFIX$1" >/dev/null 2>&1 || true; }
+# Inputs that are not in git: test instances, and the generator pools gen_instances samples from.
+rsync_inputs() {
+  rsync -a -e "$(rsh_e)" problem-gen/problems/ "$SSH_TARGET:$REPO_DIR/problem-gen/problems/"
+  rsync -a -e "$(rsh_e)" problem-gen/data/ "$SSH_TARGET:$REPO_DIR/problem-gen/data/"
+}
 
 cmd_bootstrap() {
   # The server can only check out the branch once it is on GitHub (never pushes main).
   git push origin "$BRANCH"
-  # The unit tests read instances from problem-gen/problems (not in git): clone, rsync them, then build and test.
+  # The unit tests read instances from problem-gen/problems (not in git): clone, rsync the inputs, then build and test.
   rssh "REPO_URL=$REPO_URL REPO_DIR=$REPO_DIR BRANCH=$BRANCH bash -s" <<'REMOTE'
 set -euo pipefail
 [[ -d "$REPO_DIR/.git" ]] || git clone "$REPO_URL" "$REPO_DIR"
@@ -40,7 +54,7 @@ git fetch origin
 git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
 REMOTE
-  rsync -a -e "$(rsh_e)" problem-gen/problems/ "$SSH_TARGET:$REPO_DIR/problem-gen/problems/"
+  rsync_inputs
   rssh "REPO_URL=$REPO_URL REPO_DIR=$REPO_DIR BRANCH=$BRANCH TORCH_INDEX_URL=$TORCH_INDEX_URL REQUIRE_CUDA=${REQUIRE_CUDA:-1} bash -s" <<'REMOTE'
 set -euo pipefail
 export PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH
@@ -73,37 +87,38 @@ REMOTE
 cmd_sync() {
   git push origin "$BRANCH"
   rssh "$REMOTE_PATH; cd $REPO_DIR && git fetch && git checkout $BRANCH && git reset --hard origin/$BRANCH"
-  rsync -a -e "$(rsh_e)" problem-gen/problems/ "$SSH_TARGET:$REPO_DIR/problem-gen/problems/"
+  rsync_inputs
 }
 
 cmd_push_state() {
-  [[ -d results/stage3 ]] || { echo "no results/stage3 to push" >&2; exit 1; }
-  rssh "mkdir -p $REPO_DIR/results/stage3"
-  rsync -a -e "$(rsh_e)" results/stage3/ "$SSH_TARGET:$REPO_DIR/results/stage3/"
+  [[ -d $ROOT ]] || { echo "no $ROOT to push" >&2; exit 1; }
+  rssh "mkdir -p $REPO_DIR/$ROOT"
+  rsync -a -e "$(rsh_e)" "$ROOT/" "$SSH_TARGET:$REPO_DIR/$ROOT/"
 }
 
 cmd_run() {
-  local name="${1:?run <name> <command...>}"; shift
-  [[ $# -gt 0 ]] || { echo "run <name> <command...>" >&2; exit 1; }
-  local inner="$REMOTE_PATH; cd $REPO_DIR; $*"
+  local name="${1:?run <name> '<command>'}"
+  [[ $# -eq 2 ]] || { echo "run <name> '<command>': the command is one (quoted) string" >&2; exit 1; }
+  local inner="$REMOTE_PATH; export STAGE3_HOST=$HOST; cd $REPO_DIR; $2"
   rssh "tmux new-session -d -s $(printf %q "$name") bash -c $(printf %q "$inner")"
   echo "started tmux session $name on $HOST"
 }
 
 cmd_status() {
-  rssh "tmux ls 2>&1 || true; echo '--- pipeline.log'; tail -n 20 $REPO_DIR/results/stage3/pipeline.log 2>&1 || true; echo '---'; uptime"
+  rssh "tmux ls 2>&1 || true; echo '--- pipeline.log'; tail -n 20 $REPO_DIR/$ROOT/pipeline.log 2>&1 || true; echo '---'; uptime"
 }
 
 cmd_pull() {
-  mkdir -p results/stage3
-  rsync -a -e "$(rsh_e)" --exclude 'instances/' --exclude 'labels/' \
-    "$SSH_TARGET:$REPO_DIR/results/stage3/" results/stage3/
+  mkdir -p "$ROOT"
+  # instances/ and labels/ at the top of the results tree are regenerated from seeds on any host
+  rsync -a --partial -e "$(rsh_e)" --exclude '/instances/' --exclude '/labels/' \
+    "$SSH_TARGET:$REPO_DIR/$ROOT/" "$ROOT/"
 }
 
 done_batches() {
-  [[ -d results/stage3/batches ]] || return 0
+  [[ -d $ROOT/batches ]] || return 0
   local f
-  for f in results/stage3/batches/*/DONE; do
+  for f in "$ROOT"/batches/*/DONE; do
     [[ -e "$f" ]] && basename "$(dirname "$f")"
   done | sort
 }
@@ -121,20 +136,21 @@ cmd_watch() {
     if ! rssh true 2>/dev/null; then
       echo "watch: $HOST unreachable at $(date '+%F %T')" >&2
     elif ! rssh "tmux has-session -t stage3" 2>/dev/null; then
+      # remaining = every batch of the queue (run_all.sh --list) without a DONE in the pulled copy
       remaining=""
       if rssh "test -x $REPO_DIR/scripts/stage3/run_all.sh" 2>/dev/null; then
-        remaining="$(rssh "$REMOTE_PATH; cd $REPO_DIR && scripts/stage3/run_all.sh --list" 2>/dev/null || true)"
+        remaining="$(comm -23 <(rssh "cd $REPO_DIR && scripts/stage3/run_all.sh --list" 2>/dev/null | sort) <(done_batches))"
       fi
-      if [[ -n "$remaining" ]] && (( now - last_restart >= 600 )); then
+      if [[ -n "$remaining" ]] && (( now - last_restart >= WATCH_INTERVAL )); then
         last_restart=$now
-        if cmd_run stage3 "scripts/stage3/run_all.sh >> results/stage3/pipeline.log 2>&1"; then
+        if cmd_run stage3 "mkdir -p $ROOT && $QUEUE >> $ROOT/pipeline.log 2>&1"; then
           notify "stage3 queue restarted on $HOST ($(echo "$remaining" | wc -l | tr -d ' ') batches remain)"
         else
           echo "watch: restart of stage3 failed on $HOST" >&2
         fi
       fi
     fi
-    sleep 600
+    sleep "$WATCH_INTERVAL"
   done
 }
 
