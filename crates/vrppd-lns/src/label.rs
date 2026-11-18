@@ -29,6 +29,8 @@ pub struct LabelConfig {
   /// so that early states with many improving removals and late, converged
   /// states are both covered) or "even" (lns_iters * i / S).
   pub schedule: String,
+  /// Fraction of the M tries counted as the top set for `top_share`.
+  pub top_frac: f64,
 }
 
 impl Default for LabelConfig {
@@ -40,6 +42,7 @@ impl Default for LabelConfig {
       k: None,
       seed: 0,
       schedule: "log".to_string(),
+      top_frac: 0.1,
     }
   }
 }
@@ -90,10 +93,53 @@ pub struct LabelledState {
   pub try_improvements: Vec<f64>,
   /// Removed order indices of the best try.
   pub best_try: Vec<usize>,
+  /// Share of the tries containing the order that were in the top set
+  /// (null if never sampled). Absent in Stage 2 label files.
+  #[serde(default)]
+  pub top_share: Vec<Option<f64>>,
 }
 
-/// (scores, counts, in_best, try_improvements, best_try) of one labelled state.
-pub type StateLabels = (Vec<Option<f64>>, Vec<u32>, Vec<bool>, Vec<f64>, Vec<usize>);
+/// (scores, counts, in_best, try_improvements, best_try, top_share) of one labelled state.
+pub type StateLabels = (
+  Vec<Option<f64>>,
+  Vec<u32>,
+  Vec<bool>,
+  Vec<f64>,
+  Vec<usize>,
+  Vec<Option<f64>>,
+);
+
+/// For every order: (tries containing it that are among the `ceil(top_frac * M)`
+/// largest improvements) / (tries containing it). Ties go to the lower try index.
+/// `None` if no try contains the order.
+pub fn top_share(
+  try_sets: &[Vec<usize>],
+  improvements: &[f64],
+  n_orders: usize,
+  top_frac: f64,
+) -> Vec<Option<f64>> {
+  let m = try_sets.len();
+  let n_top = ((top_frac * m as f64).ceil() as usize).min(m);
+  let mut ranked: Vec<usize> = (0..m).collect();
+  ranked.sort_by(|&a, &b| improvements[b].total_cmp(&improvements[a]).then(a.cmp(&b)));
+  let mut is_top = vec![false; m];
+  for &t in &ranked[..n_top] {
+    is_top[t] = true;
+  }
+  let mut top = vec![0u32; n_orders];
+  let mut all = vec![0u32; n_orders];
+  for (t, set) in try_sets.iter().enumerate() {
+    for &o in set {
+      all[o] += 1;
+      if is_top[t] {
+        top[o] += 1;
+      }
+    }
+  }
+  (0..n_orders)
+    .map(|o| (all[o] > 0).then(|| top[o] as f64 / all[o] as f64))
+    .collect()
+}
 
 /// Evaluate one state: M random removal sets of size k, greedy repair.
 pub fn label_state(
@@ -101,12 +147,14 @@ pub fn label_state(
   sol: &WorkingSolution,
   m: usize,
   k: usize,
+  top_frac: f64,
   rng: &mut Xoshiro256StarStar,
 ) -> StateLabels {
   let n = ctx.n_orders();
   let mut sum = vec![0.0; n];
   let mut counts = vec![0u32; n];
   let mut improvements = Vec::with_capacity(m);
+  let mut try_sets: Vec<Vec<usize>> = Vec::with_capacity(m);
   let mut best_imp = f64::NEG_INFINITY;
   let mut best_set: Vec<usize> = Vec::new();
   let mut op = RandomDestroy;
@@ -126,9 +174,11 @@ pub fn label_state(
     }
     if imp > best_imp {
       best_imp = imp;
-      best_set = removed;
+      best_set = removed.clone();
     }
+    try_sets.push(removed);
   }
+  let shares = top_share(&try_sets, &improvements, n, top_frac);
   let scores = (0..n)
     .map(|o| {
       if counts[o] > 0 {
@@ -142,7 +192,7 @@ pub fn label_state(
   for &o in &best_set {
     in_best[o] = true;
   }
-  (scores, counts, in_best, improvements, best_set)
+  (scores, counts, in_best, improvements, best_set, shares)
 }
 
 /// Run the random-removal LNS on one instance, snapshot states and label them.
@@ -182,8 +232,8 @@ pub fn label_instance(
     let mut rng = Xoshiro256StarStar::seed_from_u64(
       cfg.seed ^ (0x9E37_79B9_7F4A_7C15u64.wrapping_mul(si as u64 + 1)),
     );
-    let (scores, counts, in_best, try_improvements, best_try) =
-      label_state(ctx, &sol, cfg.m, k, &mut rng);
+    let (scores, counts, in_best, try_improvements, best_try, top_share) =
+      label_state(ctx, &sol, cfg.m, k, cfg.top_frac, &mut rng);
     let feats = compute_features(ctx, &sol);
     let features: Vec<Vec<f64>> = (0..n).map(|o| feats[o * 8..(o + 1) * 8].to_vec()).collect();
     out.push(LabelledState {
@@ -205,6 +255,7 @@ pub fn label_instance(
       in_best,
       try_improvements,
       best_try,
+      top_share,
     });
   }
   out
@@ -235,6 +286,7 @@ mod tests {
       k: None,
       seed: 1,
       schedule: "even".to_string(),
+      top_frac: 0.1,
     };
     let states = label_instance(&ctx, "x", "10_20", "train", &cfg);
     assert_eq!(states.len(), 3);
@@ -252,6 +304,35 @@ mod tests {
       assert_eq!(s.in_best.iter().filter(|b| **b).count(), 3);
       let total: u32 = s.counts.iter().sum();
       assert_eq!(total, 24);
+      assert_eq!(s.top_share.len(), 20);
     }
+  }
+
+  #[test]
+  fn top_share_small_example() {
+    let sets = vec![vec![0, 1], vec![1, 2], vec![0, 2], vec![2, 3]];
+    let imps = [5.0, 1.0, 4.0, 0.0];
+    let got = top_share(&sets, &imps, 5, 0.5);
+    assert_eq!(
+      got,
+      vec![Some(1.0), Some(0.5), Some(1.0 / 3.0), Some(0.0), None]
+    );
+  }
+
+  #[test]
+  fn top_share_ties_go_to_lower_try_index() {
+    let sets = vec![vec![0], vec![1]];
+    let got = top_share(&sets, &[1.0, 1.0], 2, 0.5);
+    assert_eq!(got, vec![Some(1.0), Some(0.0)]);
+  }
+
+  #[test]
+  fn labelled_state_without_top_share_still_parses() {
+    let line = include_str!("../tests/fixtures/stage2_label_line.json");
+    assert!(!line.contains("top_share"));
+    let s: LabelledState = serde_json::from_str(line).unwrap();
+    assert!(s.top_share.is_empty());
+    assert_eq!(s.n_orders, 20);
+    assert_eq!(s.n_vehicles, 10);
   }
 }

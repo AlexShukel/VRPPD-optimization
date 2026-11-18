@@ -38,6 +38,9 @@ struct Args {
   /// Snapshot schedule: log | even.
   #[arg(long, default_value = "log")]
   schedule: String,
+  /// Fraction of tries counted as the top set for top_share.
+  #[arg(long, default_value_t = 0.1)]
+  top_frac: f64,
   /// Output JSONL path.
   #[arg(long)]
   out: PathBuf,
@@ -83,6 +86,7 @@ fn main() {
         k: if args.k > 0 { Some(args.k) } else { None },
         seed: args.seed + i as u64,
         schedule: args.schedule.clone(),
+        top_frac: args.top_frac,
       };
       let name = format!("{}_{}_{}", args.split, cell, inst.id);
       let states = label_instance(&ctx, &name, &cell, &args.split, &cfg);
