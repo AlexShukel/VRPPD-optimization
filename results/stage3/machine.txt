@@ -1,0 +1,15 @@
+Compute host pingwin (measured 2026-11-18)
+Ubuntu 24.04 under WSL2, Intel i5-14600KF (20 logical CPUs as seen by WSL), 27 GB, RTX 4070 SUPER, Rust 1.100, torch CUDA (cu124) sees the GPU.
+
+Core check: lns --cell 20_50 --operator random --iters 20000 --max-instances 1 --threads 1, taskset -c N, iterations per second (two repetitions)
+cpu   rep1      rep2
+0     58422.8   58335.3
+2     55386.3   58086.9
+10    57797.3   58606.7
+12    58421.3   57764.9
+18    58790.4   58375.9
+Result: no P/E-core split visible; all cores within noise (about 1 %, one 5 % outlier on cpu 2 in rep1). WSL reports SMT sibling pairs (0-1, 2-3, ..., 18-19).
+Decision: TIMED_CPUS=0,2,4,6,8,10 (one thread per reported physical core, no SMT siblings) in hosts/pingwin.env.
+
+Survival check: tmux session `probe` (sleep 600) started 09:19:48, no ssh connection from the Mac for 3 minutes (checked at 09:23:03, 3m15s later).
+Result: session still listed, uptime 9 min (WSL not restarted during the check). Note: WSL had been up only ~4 min when this task began, i.e. it was restarted before the task; keepalive is still recommended for long runs.
