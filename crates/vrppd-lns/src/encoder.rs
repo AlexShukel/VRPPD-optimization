@@ -125,13 +125,16 @@ fn relu(x: &mut [f32]) {
 }
 
 /// e^x for x <= 0 with the Cephes `expf` reduction and polynomial (about
-/// 1 ulp), written without a libm call so that loops over it vectorise.
-/// Arguments below -87 are clamped (e^-87 is about 1.6e-38).
+/// 1 ulp). It uses no libm call and no float-to-int conversion, so loops over
+/// it vectorise even for the baseline x86_64 target (SSE2). Arguments below
+/// -87 are clamped (e^-87 is about 1.6e-38); NaN stays NaN.
 #[inline(always)]
 fn exp_nonpos(x: f32) -> f32 {
-  const ROUND: f32 = 12_582_912.0; // 1.5 * 2^23: adding and subtracting it rounds to an integer
-  let x = x.max(-87.0);
-  let n = (x * std::f32::consts::LOG2_E + ROUND) - ROUND;
+  // 1.5 * 2^23: k = x log2(e) + ROUND rounds to an integer n, held in k's low mantissa bits.
+  const ROUND: f32 = 12_582_912.0;
+  let x = if x < -87.0 { -87.0 } else { x };
+  let k = x * std::f32::consts::LOG2_E + ROUND;
+  let n = k - ROUND;
   let r = x - n * 0.693_359_4 - n * -2.121_944_4e-4; // x - n ln 2, ln 2 split in two parts
   let p = 1.987_569_1e-4;
   let p = p * r + 1.398_199_9e-3;
@@ -139,8 +142,9 @@ fn exp_nonpos(x: f32) -> f32 {
   let p = p * r + 4.166_579_6e-2;
   let p = p * r + 1.666_666_5e-1;
   let p = p * r + 0.5;
-  // 2^n with n in -126..=0 is a normal float, built from its exponent bits.
-  (p * r * r + r + 1.0) * f32::from_bits(((n as i32 + 127) as u32) << 23)
+  // 2^n for n in -126..=0 (a normal float) from its exponent bits; n = bits(k) - bits(ROUND).
+  let n_bits = k.to_bits().wrapping_sub(ROUND.to_bits());
+  (p * r * r + r + 1.0) * f32::from_bits(n_bits.wrapping_add(127) << 23)
 }
 
 /// Replace a row of attention scores by exp(score - row max) and return their
@@ -682,6 +686,8 @@ mod tests {
       worst = worst.max((got - want).abs() / want);
     }
     assert!(worst < 5e-7, "max relative error {worst}");
+    assert!(exp_nonpos(f32::NAN).is_nan());
+    assert!(exp_nonpos(-1000.0) < 1e-37);
     let mut row = [0.5_f32, -3.0, 2.0, 2.0, -80.0, 0.0, 1.0, -1.5, 0.25];
     let want: Vec<f32> = row.iter().map(|v| (v - 2.0_f32).exp()).collect();
     let sum = exp_shifted(&mut row);
