@@ -25,7 +25,7 @@ struct Args {
   count: usize,
   #[arg(long)]
   seed: u64,
-  /// Output directory; files are <i>.json.
+  /// Output directory; files are <i>.json (each written as <i>.json.tmp, then renamed).
   #[arg(long)]
   out: PathBuf,
   /// Pool directory (default problem-gen/data).
@@ -79,11 +79,10 @@ fn main() {
       vehicles: v,
       orders: o,
     };
-    std::fs::write(
-      args.out.join(format!("{i}.json")),
-      serde_json::to_string_pretty(&problem).unwrap(),
-    )
-    .expect("write instance");
+    // *.tmp then renamed: an interrupted run leaves no half-written instance
+    let tmp = args.out.join(format!("{i}.json.tmp"));
+    std::fs::write(&tmp, serde_json::to_string_pretty(&problem).unwrap()).expect("write instance");
+    std::fs::rename(&tmp, args.out.join(format!("{i}.json"))).expect("rename instance");
   }
   eprintln!(
     "gen_instances: {} instances {}x{} seed={} -> {}",

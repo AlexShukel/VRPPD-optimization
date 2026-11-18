@@ -220,18 +220,14 @@ pub fn run_lns(
     iter += 1;
     let temperature = annealing.temperature(progress);
 
+    // destroy_ms covers selecting the orders, copying and removing them;
+    // repair_ms the shuffle and the reinsertion.
     let td = Instant::now();
     let removed = op.select(ctx, &current, k, &mut rng);
-    let mut candidate = current.clone();
-    destroy(ctx, &mut candidate, &removed);
-    destroy_ns += td.elapsed().as_nanos();
-
-    let tr = Instant::now();
-    // Reinsert in random order (classic LNS greedy repair).
-    let mut order = removed;
-    shuffle(&mut order, &mut rng);
-    repair_greedy(ctx, &mut candidate, &order);
-    repair_ns += tr.elapsed().as_nanos();
+    let select_ns = td.elapsed().as_nanos();
+    let (candidate, times) = destroy_repair(ctx, &current, &removed, &mut rng);
+    destroy_ns += select_ns + times.destroy_ns;
+    repair_ns += times.repair_ns;
 
     let cand_obj = ctx.objective_value(&candidate);
     let delta = cand_obj - current_obj;
@@ -320,6 +316,44 @@ pub fn run_lns(
     repair_ms: repair_ns as f64 / 1e6,
     valid,
   }
+}
+
+/// Time spent in the two halves of [`destroy_repair`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DestroyRepairTimes {
+  /// Copying the solution and removing the orders.
+  pub destroy_ns: u128,
+  /// Shuffling the removed orders and reinserting them.
+  pub repair_ns: u128,
+}
+
+/// One LNS move: a copy of `current` with the orders `removed` destroyed and
+/// greedily reinserted in random order (classic LNS greedy repair; the order
+/// is shuffled with `rng`). The move of [`run_lns`] and of the Python
+/// environment (`vrppd-py`). Returns the candidate and the time of each half.
+pub fn destroy_repair(
+  ctx: &Context,
+  current: &WorkingSolution,
+  removed: &[usize],
+  rng: &mut Xoshiro256StarStar,
+) -> (WorkingSolution, DestroyRepairTimes) {
+  let td = Instant::now();
+  let mut candidate = current.clone();
+  destroy(ctx, &mut candidate, removed);
+  let destroy_ns = td.elapsed().as_nanos();
+
+  let tr = Instant::now();
+  let mut order = removed.to_vec();
+  shuffle(&mut order, rng);
+  repair_greedy(ctx, &mut candidate, &order);
+  let repair_ns = tr.elapsed().as_nanos();
+  (
+    candidate,
+    DestroyRepairTimes {
+      destroy_ns,
+      repair_ns,
+    },
+  )
 }
 
 /// Fisher-Yates shuffle (the random reinsertion order of [`run_lns`]'s repair).
@@ -474,10 +508,11 @@ mod tests {
     // `best` is the from-scratch evaluation of the best solution, which
     // differs from the incrementally tracked value in the last bits, so this
     // compares with a tolerance (the recorded value itself is unchanged).
-    // The platform's libm computes the haversine sin/cos differently in the
-    // last bits, which changes the odd acceptance decision and so the
-    // trajectory: each known platform has its own recorded value, any other
-    // platform gets a loose check against the macOS one.
+    // The two platforms give different values for the same solution: they
+    // price coincident stops differently (the haversine `acos` of a value
+    // near 1 gives about 9.5e-5 km on macOS and 0 on glibc). It is not a
+    // diverged trajectory. Each known platform has its own recorded value,
+    // any other platform gets a loose check against the macOS one.
     let (recorded, tolerance) = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
       (RECORDED_DISTANCE_BEST_MACOS_AARCH64, 1e-9)
     } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
@@ -609,6 +644,26 @@ mod tests {
     assert_eq!(res.best_price, sol.total_price);
     assert_eq!(res.best_distance, sol.total_distance);
     assert_eq!(res.best_empty, sol.empty_distance);
+  }
+
+  #[test]
+  fn destroy_repair_is_destroy_then_shuffled_greedy_repair() {
+    let problem = load_problem("10_20", 0);
+    let ctx = Context::new(&problem);
+    let current = initial_solution(&ctx, 3);
+    let removed = vec![4, 0, 7, 12];
+    let mut rng = Xoshiro256StarStar::seed_from_u64(9);
+    let (got, _) = destroy_repair(&ctx, &current, &removed, &mut rng);
+
+    let mut want_rng = Xoshiro256StarStar::seed_from_u64(9);
+    let mut want = current.clone();
+    destroy(&ctx, &mut want, &removed);
+    let mut order = removed.clone();
+    shuffle(&mut order, &mut want_rng);
+    repair_greedy(&ctx, &mut want, &order);
+    assert_eq!(stop_lists(&problem, &got), stop_lists(&problem, &want));
+    assert_eq!(got.total_distance, want.total_distance);
+    assert_eq!(rng.r#gen::<u64>(), want_rng.r#gen::<u64>()); // same draws
   }
 
   #[test]

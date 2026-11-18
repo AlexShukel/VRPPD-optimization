@@ -7,9 +7,9 @@ use std::time::Instant;
 
 use clap::Parser;
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use vrppd_core::Objective;
-use vrppd_lns::io::{cell_name, init_threads, load_instances, resolve_cell_dir};
+use vrppd_lns::io::{cell_name, file_hash, init_threads, load_instances, resolve_cell_dir};
 use vrppd_lns::{
   Context, LnsConfig, build_operator, distance_name, initial_solution, objective_name,
   parse_objective, run_lns,
@@ -93,21 +93,34 @@ struct RunFile<'a> {
   /// Worker threads of the run's process (runs execute in parallel, one per thread).
   threads: usize,
   cpu_list: &'a str,
+  /// `--weights` as given, and the first 16 hex digits of the file's SHA-256
+  /// (both empty without `--weights`).
+  weights: &'a str,
+  weights_hash: &'a str,
   #[serde(flatten)]
   result: &'a vrppd_lns::LnsResult,
 }
 
-/// Objective recorded in an existing result file (None if there is no
-/// readable file; files from before the field existed are distance runs).
-fn existing_objective(path: &Path) -> Option<String> {
+/// What a run file that is skipped must agree with.
+#[derive(Deserialize)]
+struct ExistingRun {
+  /// Files from before the field existed are distance runs.
+  #[serde(default = "distance_name")]
+  objective: String,
+  /// Empty without weights and in files from before the field existed.
+  #[serde(default)]
+  weights_hash: String,
+}
+
+/// The recorded fields of an existing result file (None if there is no
+/// readable file).
+fn existing_run(path: &Path) -> Option<ExistingRun> {
   let text = fs::read_to_string(path).ok()?;
-  let value: serde_json::Value = serde_json::from_str(&text).ok()?;
-  Some(
-    value
-      .get("objective")
-      .and_then(|o| o.as_str())
-      .map_or_else(distance_name, str::to_string),
-  )
+  serde_json::from_str(&text).ok()
+}
+
+fn shown_hash(hash: &str) -> &str {
+  if hash.is_empty() { "none" } else { hash }
 }
 
 fn main() {
@@ -131,6 +144,17 @@ fn main() {
     eprintln!("{e}");
     std::process::exit(2)
   });
+  let weights = args
+    .weights
+    .as_deref()
+    .map_or_else(String::new, |p| p.to_string_lossy().into_owned());
+  let weights_hash = match args.weights.as_deref() {
+    Some(p) => file_hash(p).unwrap_or_else(|e| {
+      eprintln!("{e}");
+      std::process::exit(2)
+    }),
+    None => String::new(),
+  };
 
   let cfg_base = LnsConfig {
     max_iters: if args.iters > 0 {
@@ -171,12 +195,22 @@ fn main() {
     for &(i, r) in &jobs {
       let seed = args.seed + 1000 * i as u64 + r as u64;
       let path = args.out.join(format!("{}_s{}.json", instances[i].id, seed));
-      if let Some(found) = existing_objective(&path) {
-        if found != objective_name(args.objective) {
+      if let Some(found) = existing_run(&path) {
+        if found.objective != objective_name(args.objective) {
           eprintln!(
-            "{} holds a '{found}' run but --objective is '{}'; use another --out or --force",
+            "{} holds a '{}' run but --objective is '{}'; use another --out or --force",
             path.display(),
+            found.objective,
             objective_name(args.objective)
+          );
+          std::process::exit(1);
+        }
+        if found.weights_hash != weights_hash {
+          eprintln!(
+            "{} was written with weights hash {} but --weights '{weights}' has hash {}; use another --out or --force",
+            path.display(),
+            shown_hash(&found.weights_hash),
+            shown_hash(&weights_hash)
           );
           std::process::exit(1);
         }
@@ -227,6 +261,8 @@ fn main() {
         host: &args.host_tag,
         threads,
         cpu_list: &args.cpu_list,
+        weights: &weights,
+        weights_hash: &weights_hash,
         result: &res,
       };
       let tmp = args.out.join(format!("{stem}.json.tmp"));

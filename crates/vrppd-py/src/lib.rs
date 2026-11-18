@@ -16,8 +16,7 @@ use rayon::prelude::*;
 use self_cell::self_cell;
 use vrppd_core::{Problem, StopKind, WorkingSolution};
 use vrppd_lns::Context;
-use vrppd_lns::lns::{Annealing, LnsConfig, initial_solution, k_for, sa_accept, shuffle};
-use vrppd_lns::solution::{destroy, repair_greedy};
+use vrppd_lns::lns::{Annealing, LnsConfig, destroy_repair, initial_solution, k_for, sa_accept};
 
 self_cell!(
   /// A problem together with its LNS context, which borrows it.
@@ -87,7 +86,8 @@ impl Env {
       .map(|(j, removed)| {
         let mut rng = Xoshiro256StarStar::seed_from_u64(sample_seed(self.eval_seed, j));
         let ctx = self.ctx();
-        let after = ctx.objective_value(&repaired(ctx, &self.current, removed, &mut rng));
+        let (candidate, _) = destroy_repair(ctx, &self.current, removed, &mut rng);
+        let after = ctx.objective_value(&candidate);
         100.0 * (before - after) / before
       })
       .collect()
@@ -100,7 +100,7 @@ impl Env {
     let progress = self.iteration as f64 / horizon as f64;
     self.iteration += 1;
     let temperature = self.annealing.temperature(progress);
-    let candidate = repaired(ctx, &self.current, removed, &mut self.rng);
+    let (candidate, _) = destroy_repair(ctx, &self.current, removed, &mut self.rng);
     let delta = ctx.objective_value(&candidate) - ctx.objective_value(&self.current);
     let accepted = sa_accept(delta, temperature, &mut self.rng);
     if accepted {
@@ -129,22 +129,6 @@ impl Env {
       })
       .collect()
   }
-}
-
-/// A copy of `current` with `removed` destroyed and greedily reinserted in
-/// random order, as in `run_lns`.
-fn repaired(
-  ctx: &Context,
-  current: &WorkingSolution,
-  removed: &[usize],
-  rng: &mut Xoshiro256StarStar,
-) -> WorkingSolution {
-  let mut candidate = current.clone();
-  destroy(ctx, &mut candidate, removed);
-  let mut order = removed.to_vec();
-  shuffle(&mut order, rng);
-  repair_greedy(ctx, &mut candidate, &order);
-  candidate
 }
 
 /// Seed of evaluation sample `j`: output `j + 1` of a SplitMix64 generator

@@ -1,6 +1,7 @@
 //! Reference values: best of `--runs` CEA runs (thesis settings, wall-time
 //! budget) per instance in the chosen objective. Runs instances sequentially
-//! because CEA is itself multi-threaded.
+//! because CEA is itself multi-threaded: it parallelises on rayon's global
+//! pool, which this binary sizes to the recorded `threads` before any run.
 
 use std::fs;
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use vrppd_cea::{CeaConfig, solve_cea_seeded};
 use vrppd_core::Objective;
-use vrppd_lns::io::{cell_name, load_instances, resolve_cell_dir};
+use vrppd_lns::io::{cell_name, init_threads, load_instances, resolve_cell_dir};
 use vrppd_lns::{objective_name, parse_objective};
 
 #[derive(Parser, Debug)]
@@ -69,10 +70,25 @@ struct RefRecord {
   threads: usize,
   #[serde(default)]
   cpu_list: String,
+  /// Size of rayon's global pool the runs used (absent in records written
+  /// before the pool was sized; equal to `threads` since).
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  rayon_threads: Option<usize>,
+  /// Seed of each run, in the order of `runs` (absent in older records).
+  #[serde(default, skip_serializing_if = "Vec::is_empty")]
+  seeds: Vec<u64>,
 }
 
 fn main() {
   let args = Args::parse();
+  // The CEA runs on rayon's global pool: size it before anything uses it
+  // (RAYON_NUM_THREADS can only lower it), so `threads` is the worker count.
+  let threads = init_threads(args.threads, 20);
+  let rayon_threads = rayon::current_num_threads();
+  if rayon_threads != threads {
+    eprintln!("cea_ref: rayon's global pool has {rayon_threads} threads, expected {threads}");
+    std::process::exit(1);
+  }
   let dir = resolve_cell_dir(&args.cell);
   let cell = cell_name(&dir);
   let instances = load_instances(&dir, args.max_instances).unwrap_or_else(|e| {
@@ -87,7 +103,6 @@ fn main() {
     .ok()
     .and_then(|t| serde_json::from_str(&t).ok())
     .unwrap_or_default();
-  let threads = args.threads.clamp(1, 20);
   let objective = objective_name(args.objective);
   if let Some(other) = records.iter().find(|r| r.objective != objective) {
     eprintln!(
@@ -124,8 +139,13 @@ fn main() {
       host: args.host_tag.clone(),
       threads,
       cpu_list: args.cpu_list.clone(),
+      rayon_threads: Some(rayon_threads),
+      seeds: Vec::new(),
     };
     for r in 0..args.runs {
+      // The Stage 2 derivation, unchanged: the seed depends on the instance
+      // only through the length of its id, so instances whose ids have the
+      // same length share their run seeds.
       let seed = args.seed.wrapping_mul(1_000_003).wrapping_add(r as u64) ^ (inst.id.len() as u64);
       let cfg = CeaConfig {
         wall_time_cap_ms: Some(args.seconds * 1000),
@@ -136,6 +156,7 @@ fn main() {
       let solved = solve_cea_seeded(&inst.problem, args.objective, cfg, seed);
       let v = args.objective.energy(&solved.solution);
       rec.runs.push(v);
+      rec.seeds.push(seed);
       rec.runtimes_ms.push(t.elapsed().as_secs_f64() * 1000.0);
       rec.generations.push(solved.generations);
       rec.exit_reasons.push(format!("{:?}", solved.exit_reason));
