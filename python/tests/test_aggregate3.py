@@ -20,20 +20,21 @@ def write_json(path, obj):
 
 
 def write_run(root, group, operator, cell, instance, seed, *, best=100.0, objective="distance", iters=50,
-              budget_iters=50, budget_secs=None, host="h1", threads=4, cpu_list="none", tau=0.0):
+              budget_iters=50, budget_secs=None, host="h1", threads=4, cpu_list="none", tau=0.0, k=3, n_orders=10,
+              extra=None):
     initial = best * 1.2
     totals = {"distance": best, "price": best * 2.0, "empty": best / 10.0}
     totals[objective] = best
     curve = [{"iteration": 0, "elapsed_ms": 0.0, "current": initial, "best": initial, "accepted": True},
              {"iteration": iters // 2, "elapsed_ms": 5.0, "current": best * 1.1, "best": best * 1.1, "accepted": True},
              {"iteration": iters, "elapsed_ms": 10.0, "current": best, "best": best, "accepted": True}]
-    d = {"cell": cell, "instance": str(instance), "n_orders": 10, "n_vehicles": 10, "budget_iters": budget_iters,
+    d = {"cell": cell, "instance": str(instance), "n_orders": n_orders, "n_vehicles": 10, "budget_iters": budget_iters,
          "budget_secs": budget_secs, "tau": tau, "host": host, "threads": threads, "cpu_list": cpu_list,
-         "operator": operator, "objective": objective, "seed": seed, "k": 3, "initial": initial, "best": best,
+         "operator": operator, "objective": objective, "seed": seed, "k": k, "initial": initial, "best": best,
          "best_distance": totals["distance"], "best_price": totals["price"], "best_empty": totals["empty"],
          "final_current": best, "iterations": iters, "elapsed_ms": 10.0, "accepted": iters // 2,
          "improved_current": 3, "new_best_count": 2, "best_iteration": iters, "best_elapsed_ms": 10.0,
-         "curve": curve, "best_routes": [], "destroy_ms": 1.0, "repair_ms": 9.0, "valid": True}
+         "curve": curve, "best_routes": [], "destroy_ms": 1.0, "repair_ms": 9.0, "valid": True, **(extra or {})}
     write_json(os.path.join(root, "lns", group, operator, cell, f"{instance}_s{seed}.json"), d)
 
 
@@ -276,7 +277,7 @@ def summary_frame(rows):
     base = {"kind": "iters", "budget": "iters5000", "objective": "distance", "k_frac": np.nan, "cell": "10_10",
             "operator": "random", "gap_best_pct": 0.0, "cea_best": 100.0, "best": 100.0, "iterations": 10,
             "elapsed_ms": 1.0, "iters_per_s": 1.0, "reached_1pct": 1.0, "iters_to_1pct": 1.0, "secs_to_1pct": 1.0,
-            "accept_rate": 0.5, "destroy_share": 0.5, "valid": True}
+            "accept_rate": 0.5, "destroy_share": 0.5, "valid": True, "k": 3}
     return pd.DataFrame([{**base, **r} for r in rows])
 
 
@@ -367,3 +368,175 @@ def test_training_summary_tolerates_metrics_without_threads_or_memory(tmp_path, 
     expected = 512.0 if styles[1] == "new" else np.nan
     np.testing.assert_equal(t.loc["seeds", "peak_rss_mb"], expected)
     np.testing.assert_equal(t.loc["seeds mean", "peak_rss_mb"], expected)  # pandas mean skips the missing value
+
+
+def test_k_for_matches_the_lns_destroy_size():
+    # max(3, round(frac * n)), halves rounded up as in Rust's f64::round
+    fracs = (0.05, 0.10, 0.15, 0.25, 0.35)
+    assert [aggregate3.k_for(10, f) for f in fracs] == [3, 3, 3, 3, 4]
+    assert [aggregate3.k_for(20, f) for f in fracs] == [3, 3, 3, 5, 7]
+    assert [aggregate3.k_for(50, f) for f in fracs] == [3, 5, 8, 13, 18]
+    assert aggregate3.k_for(2, 0.5) == 2  # at most n
+
+
+def write_ksweep(root, plan, n_instances=4):
+    """plan: {cell: {fraction: k}} of the fractions that ran."""
+    for cell, runs in plan.items():
+        n = int(cell.split("_")[1])
+        for frac, k in runs.items():
+            for op_i, op in enumerate(("random", "adaptive", "v1")):
+                for i in range(n_instances):
+                    write_run(root, f"ksweep-k{frac}", op, cell, i, 1 + 1000 * i, best=100.0 + i + op_i + k / 10,
+                              k=k, n_orders=n)
+    write_batch(root, "ksweep")
+
+
+def test_ksweep_table_carries_k_and_notes_collapsed_fractions(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    # what run_all.sh runs for fractions 0.05, 0.1, 0.25: the first fraction of each k per class
+    write_ksweep(root, {"10_10": {0.05: 3}, "10_20": {0.05: 3, 0.25: 5}, "20_50": {0.05: 3, 0.1: 5, 0.25: 13}})
+    drawn = []
+    real = aggregate3.fig_by_x
+
+    def spy(s, panels, x, *args, **kwargs):
+        drawn.append((x, s.copy()))
+        return real(s, panels, x, *args, **kwargs)
+
+    monkeypatch.setattr(aggregate3, "fig_by_x", spy)
+    aggregate3.main(["--root", root])
+    summary = pd.read_csv(os.path.join(root, "summary.csv"))
+    ks = summary[summary.kind == "ksweep"].set_index(["cell", "k_frac", "operator"])
+    assert ks.loc[("10_20", 0.25, "random"), "k"] == 5 and ks.loc[("20_50", 0.25, "v1"), "k"] == 13
+    with open(os.path.join(root, "tables", "ksweep.tex")) as f:
+        first = f.readline().split(" & ")
+    assert first[:4] == ["10\\_10", "0.05", "3", "random"]
+    assert len(first) == 9  # cell, k_frac, k, operator, runs, three gap columns, objective: no it/s
+    with open(os.path.join(root, "summary.md")) as f:
+        md = f.read()
+    assert "| cell | k_frac | k | operator |" in md
+    assert "10_10: k = 3 for fractions 0.05, 0.1, 0.25; 10_20: k = 3 for fractions 0.05, 0.1." in md
+    (x, fig_rows), = [d for d in drawn if d[0] == "k"]
+    assert sorted(set(fig_rows.k)) == [3, 5, 13]
+    assert os.path.exists(os.path.join(root, "figures", "k_sweep.png"))
+
+
+def test_ksweep_figure_draws_identical_fractions_once(tmp_path, monkeypatch):
+    root = str(tmp_path)
+    # an older queue ran every fraction: 0.05 and 0.25 give 10_10 the same k and identical runs
+    write_ksweep(root, {"10_10": {0.05: 3, 0.25: 3}, "10_20": {0.05: 3, 0.25: 5}})
+    drawn = []
+    real = aggregate3.fig_by_x
+    monkeypatch.setattr(aggregate3, "fig_by_x", lambda s, *a, **kw: drawn.append(s.copy()) or real(s, *a, **kw))
+    aggregate3.main(["--root", root])
+    ks = drawn[0]
+    assert not ks.duplicated(["cell", "operator", "k"]).any()
+    assert set(ks.loc[ks.cell == "10_10", "k_frac"]) == {0.05}
+    summary = pd.read_csv(os.path.join(root, "summary.csv"))
+    assert len(summary[(summary.cell == "10_10") & (summary.k == 3)]) == 6  # the table keeps both rows
+    with open(os.path.join(root, "summary.md")) as f:
+        assert "10_10: k = 3 for fractions 0.05, 0.25." in f.read()
+
+
+def test_iteration_tables_have_no_speed_column(tmp_path):
+    root = str(tmp_path)
+    make_iters_batch(root, "10_10")
+    timed = dict(budget_iters=None, budget_secs=60.0, threads=6, cpu_list="0,2")
+    for op in ("random", "adaptive"):
+        for i in range(3):
+            write_run(root, "time60s", op, "10_10", i, 1 + 1000 * i, best=100.0 + i, **timed)
+            write_run(root, "iters5000", op, "30_100", i, 1 + 1000 * i, best=100.0 + i)
+            write_run(root, "time60s", op, "30_100", i, 1 + 1000 * i, best=100.0 + i, **timed)
+    write_batch(root, "time-10_10")
+    write_batch(root, "large-30_100")
+    aggregate3.main(["--root", root])
+    with open(os.path.join(root, "summary.md")) as f:
+        sections = {sec.split("\n")[0]: sec for sec in f.read().split("\n## ")}
+    assert "it/s" not in sections["Main comparison, iteration budget"]
+    assert "| it/s |" in sections["Main comparison, wall time"]
+    large = [line for line in sections["Large classes"].splitlines() if line.startswith("| 30_100")]
+    assert {line.split("|")[2].strip(): line.split("|")[-2].strip() == "--" for line in large} == \
+        {"iters5000": True, "time60s": False}  # mixed table: it/s only on wall-time rows
+
+
+def timed_refs(**fields):
+    base = {"cell": "10_10", "instance": "0", "objective": "distance", "host": "h1", "threads": 6,
+            "cpu_list": "0,2,4,6,8,10"}
+    return pd.DataFrame([{**base, **fields}])
+
+
+def test_timed_references_need_a_pool_of_their_threads():
+    runs = pd.DataFrame(columns=aggregate3.RUN_COLUMNS)
+    aggregate3.check_timed_runs(runs, timed_refs(rayon_threads=6))
+    for refs in (timed_refs(), timed_refs(rayon_threads=np.nan)):  # written before cea_ref sized its pool
+        with pytest.raises(ValueError, match="10_10.*must be rerun"):
+            aggregate3.check_timed_runs(runs, refs)
+    with pytest.raises(ValueError, match=r"10_10.*rayon pools of \[18\] threads but record threads \[6\]"):
+        aggregate3.check_timed_runs(runs, timed_refs(rayon_threads=18))
+
+
+def test_wall_time_table_refused_for_references_without_pool_size(tmp_path):
+    root = str(tmp_path)
+    timed = dict(budget_iters=None, budget_secs=60.0, threads=6, cpu_list="0,2")
+    for cell in ("10_10", "10_20"):
+        record = {"cell": cell, "instance": "0", "n_orders": 10, "n_vehicles": 10, "runs": [90.0], "runtimes_ms": [1.0],
+                  "generations": [1], "exit_reasons": ["WallTimeCap"], "best": 90.0, "host": "h1", "threads": 6,
+                  "cpu_list": "0,2"}
+        if cell == "10_20":
+            record.update(rayon_threads=6, seeds=[7000020])
+        write_json(os.path.join(root, "reference", f"cea_ref_{cell}.json"), [record])
+        write_batch(root, f"ref-{cell}")
+        for op in ("random", "adaptive"):
+            write_run(root, "time60s", op, cell, 0, 1, best=100.0, **timed)
+        write_batch(root, f"time-{cell}")
+    aggregate3.main(["--root", root])
+    with open(os.path.join(root, "summary.md")) as f:
+        md = f.read()
+    assert "Refused the wall-time table of class 10_10" in md and "must be rerun" in md
+    assert "Refused the wall-time table of class 10_20" not in md
+    assert set(pd.read_csv(os.path.join(root, "summary.csv"))["cell"]) == {"10_20"}
+
+
+def test_neural_runs_must_use_the_selected_weights(tmp_path):
+    root = str(tmp_path)
+    for name, text in (("b0", '{"layers": []}'), ("v1", '{"model": "v1"}')):
+        os.makedirs(os.path.join(root, "models", name))
+        with open(os.path.join(root, "models", name, "weights.json"), "w") as f:
+            f.write(text)
+    selection = {"models": {"b0": {"tau": 0.5, "weights": "models/b0/weights.json"},
+                            "v1": {"tau": 0.25, "weights": "models/v1/weights.json"}},
+                 "v2": {"name": "v2-c", "tau": 1.0, "weights": "models/v2/c/weights.json"},  # file absent: not checked
+                 "best_model": {"name": "v1", "operator": "v1", "tau": 0.25, "weights": "models/v1/weights.json"}}
+    write_json(os.path.join(root, "selection", "selection.json"), selection)
+    hashes = {op: aggregate3.file_hash(os.path.join(root, "models", op, "weights.json")) for op in ("b0", "v1")}
+    assert hashes["b0"] == __import__("hashlib").sha256(b'{"layers": []}').hexdigest()[:16]
+    taus = {"b0": 0.5, "v1": 0.25, "v2": 1.0, "adaptive_n": 0.25}
+    run_hashes = {"b0": hashes["b0"], "v1": hashes["v1"], "v2": "0123456789abcdef", "adaptive_n": hashes["v1"]}
+    for k, op in enumerate(CLASSICAL + NEURAL):
+        for i in range(3):
+            write_run(root, "iters5000", op, "10_10", i, 1 + 1000 * i, best=100.0 + i + k, tau=taus.get(op, 0.0),
+                      extra={"weights_hash": run_hashes[op]} if op in run_hashes else None)
+    write_batch(root, "iters-10_10")
+    aggregate3.main(["--root", root])
+    # a run file without weights_hash (written before it was recorded) is not checked
+    path = os.path.join(root, "lns", "iters5000", "b0", "10_10", "0_s1.json")
+    with open(path) as f:
+        d = json.load(f)
+    del d["weights_hash"]
+    write_json(path, d)
+    aggregate3.main(["--root", root])
+    d["weights_hash"] = hashes["v1"]  # b0 runs made with the v1 weights
+    write_json(path, d)
+    with pytest.raises(ValueError, match="lns/iters5000/b0/10_10: weights hash"):
+        aggregate3.main(["--root", root])
+
+
+def test_train_jobs_only_for_models_that_record_threads(tmp_path):
+    root = str(tmp_path)
+    write_b0_model(root, "grid", "w64_d2_mse_mean_s0", old_style=True)  # trained before the concurrent jobs
+    write_b0_model(root, "seeds", "w64_d2_mse_mean_s1", seed=1)
+    write_json(os.path.join(root, "models", "b0", "best.json"),
+               {"best": "grid/w64_d2_mse_mean_s0", "seeds": ["grid/w64_d2_mse_mean_s0", "seeds/w64_d2_mse_mean_s1"]})
+    write_batch(root, "b0")  # its manifest says 6 jobs
+    t = aggregate3.training_summary(root).set_index("group")
+    assert np.isnan(t.loc["grid", "train_jobs"])
+    assert t.loc["seeds", "train_jobs"] == 6

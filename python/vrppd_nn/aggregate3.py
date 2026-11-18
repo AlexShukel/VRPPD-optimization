@@ -33,7 +33,9 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -70,9 +72,10 @@ TEST_INSTANCES = "problem-gen/problems"
 RUN_COLUMNS = ["budget", "operator", "cell", "instance", "seed", "initial", "best", "iterations", "elapsed_ms",
                "accepted", "improved_current", "new_best_count", "best_iteration", "best_elapsed_ms", "k",
                "destroy_ms", "repair_ms", "valid", "kind", "split", "objective", "k_frac", "tau", "host", "threads",
-               "cpu_list", "budget_iters", "budget_secs", "iters_to_1pct", "secs_to_1pct"]
+               "cpu_list", "budget_iters", "budget_secs", "iters_to_1pct", "secs_to_1pct", "n_orders", "weights",
+               "weights_hash"]
 REF_COLUMNS = ["cell", "instance", "cea_best", "cea_mean", "cea_runs", "cea_mean_runtime_s", "objective", "host",
-               "threads", "cpu_list", "file"]
+               "threads", "cpu_list", "rayon_threads", "file"]
 
 
 # ---------------------------------------------------------------- loading
@@ -110,8 +113,10 @@ def load_references3(root: str) -> pd.DataFrame:
             if objective != expected:
                 raise ValueError(f"{path}: record {r['cell']}/{r['instance']} has objective {objective!r}, "
                                  f"files there must hold {expected!r}")
+            pool = r.get("rayon_threads")  # absent before cea_ref sized rayon's pool
             rows.append({**reference_row(r), "objective": objective, "host": r.get("host", ""),
-                         "threads": r.get("threads", 0), "cpu_list": r.get("cpu_list", ""), "file": path})
+                         "threads": r.get("threads", 0), "cpu_list": r.get("cpu_list", ""),
+                         "rayon_threads": np.nan if pool is None else pool, "file": path})
     return pd.DataFrame(rows, columns=REF_COLUMNS)
 
 
@@ -156,7 +161,8 @@ def load_runs3(root: str, refs: pd.DataFrame | None = None, group_glob: str = "*
         row.update(kind=info["kind"], split=info["split"], objective=objective, k_frac=info["k_frac"],
                    tau=d.get("tau", np.nan), host=d.get("host", ""), threads=d.get("threads", 0),
                    cpu_list=d.get("cpu_list", ""), budget_iters=d.get("budget_iters"),
-                   budget_secs=d.get("budget_secs"))
+                   budget_secs=d.get("budget_secs"), n_orders=d.get("n_orders"),
+                   weights=d.get("weights", ""), weights_hash=d.get("weights_hash", ""))
         target = targets.get((cell, row["instance"], objective)) if info["split"] == "test" else None
         row["iters_to_1pct"], row["secs_to_1pct"] = (time_to_target(d["curve"], 1.01 * target)
                                                      if target is not None else (np.nan, np.nan))
@@ -205,13 +211,27 @@ def reference_batch(cell: str, objective: str) -> str:
 
 def check_timed_runs(runs: pd.DataFrame, refs: pd.DataFrame | None = None) -> None:
     """Raise ValueError (naming the class) if the wall-time files of one class, its
-    time-budget runs and CEA references, come from more than one (host, threads, CPU list)."""
+    time-budget runs and CEA references, come from more than one (host, threads, CPU list),
+    or if a CEA reference did not run on a rayon pool of its recorded threads (records
+    without rayon_threads were written before cea_ref sized the pool: rerun them)."""
     cols = ["cell", "objective", "host", "threads", "cpu_list"]
     parts = [runs.loc[runs.kind == "time", cols]]
+    problems = []
     if refs is not None and len(refs):
         parts.append(refs[cols])
+        pool = refs["rayon_threads"] if "rayon_threads" in refs else pd.Series(np.nan, index=refs.index)
+        for (cell, objective), sub in refs.assign(rayon_threads=pool).groupby(["cell", "objective"]):
+            unsized = int(sub.rayon_threads.isna().sum())
+            if unsized:
+                problems.append(f"class {cell} ({objective}): {unsized} CEA reference records have no rayon_threads "
+                                "(written before cea_ref sized its thread pool, so the CEA may have run more "
+                                "workers than recorded): the references must be rerun")
+            wrong = sub[sub.rayon_threads.notna() & (sub.rayon_threads != sub.threads)]
+            if len(wrong):
+                problems.append(f"class {cell} ({objective}): {len(wrong)} CEA reference records ran on rayon pools "
+                                f"of {sorted(set(wrong.rayon_threads.astype(int)))} threads but record threads "
+                                f"{sorted(set(wrong.threads))}")
     timed = pd.concat(parts, ignore_index=True)
-    problems = []
     for (cell, objective), sub in timed.groupby(["cell", "objective"]):
         setups = sub.groupby(["host", "threads", "cpu_list"]).size()
         if len(setups) > 1:
@@ -221,12 +241,22 @@ def check_timed_runs(runs: pd.DataFrame, refs: pd.DataFrame | None = None) -> No
         raise ValueError("\n".join(problems))
 
 
-def check_neural_taus(runs: pd.DataFrame, selection: dict) -> None:
+def file_hash(path: str) -> str:
+    """Content hash of a file as the lns binary records it (weights_hash): the first 16 hex
+    digits of its SHA-256."""
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()[:16]
+
+
+def check_neural_taus(runs: pd.DataFrame, selection: dict, root: str | None = None) -> None:
     """Raise ValueError naming the run directory when a neural run of the main, k-sweep, large
-    or objective studies used another tau than selection.json gives its operator."""
-    expected = {"b0": selection["models"].get("b0", {}).get("tau"), "v1": selection["models"].get("v1", {}).get("tau"),
-                "v2": (selection.get("v2") or {}).get("tau"), "adaptive_n": selection["best_model"]["tau"]}
-    expected = {op: tau for op, tau in expected.items() if tau is not None}
+    or objective studies used another tau than selection.json gives its operator, or, when the
+    run file records weights_hash and the selected weights file exists under root, other weights."""
+    chosen = {"b0": selection["models"].get("b0", {}), "v1": selection["models"].get("v1", {}),
+              "v2": selection.get("v2") or {}, "adaptive_n": selection["best_model"]}
+    expected = {op: m["tau"] for op, m in chosen.items() if m.get("tau") is not None}
+    hashes = {op: file_hash(os.path.join(root, m["weights"])) for op, m in chosen.items()
+              if root is not None and m.get("weights") and os.path.exists(os.path.join(root, m["weights"]))}
     neural = runs[runs.kind.isin(["iters", "time", "ksweep", "objective"]) & runs.operator.isin(list(expected))]
     bad = []
     for (group, op, cell), g in neural.groupby(["budget", "operator", "cell"]):
@@ -234,8 +264,15 @@ def check_neural_taus(runs: pd.DataFrame, selection: dict) -> None:
         wrong = ~np.isclose(taus, expected[op], rtol=0.0, atol=1e-12)
         if wrong.any():
             bad.append(f"lns/{group}/{op}/{cell}: tau {sorted(set(taus[wrong]))}, selection.json gives {expected[op]}")
+        if op in hashes:
+            recorded = g["weights_hash"].fillna("")
+            other = (recorded != "") & (recorded != hashes[op])
+            if other.any():
+                bad.append(f"lns/{group}/{op}/{cell}: weights hash {sorted(set(recorded[other]))}, the selected "
+                           f"{chosen[op]['weights']} has {hashes[op]}")
     if bad:
-        raise ValueError("neural runs do not use the selected tau (kept from an older selection?):\n" + "\n".join(bad))
+        raise ValueError("neural runs do not use the selected tau or weights (kept from an older selection?):\n"
+                         + "\n".join(bad))
 
 
 def _strings(obj):
@@ -365,7 +402,8 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
     """One row per trained model of a finished batch (all batches when done is None); for the
     seed runs of the best B0 and V1 configuration also their mean and standard deviation.
     train_jobs is the number of training processes the batch ran at once (from its manifest):
-    with more than one, train_seconds includes the contention."""
+    with more than one, train_seconds includes the contention. Models without threads in their
+    metrics.json were trained before the jobs ran concurrently: their train_jobs stays empty."""
     rows = []
     for family in ("b0", "v1"):
         if done is not None and family not in done:
@@ -391,7 +429,8 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
                     "loss": c.get("loss"), "target": c.get("target"), "width": c.get("width"), "depth": c.get("depth"),
                     "d": c.get("d"), "n_att": c.get("n_att"), "dropout": c.get("dropout"),
                     "weight_decay": c.get("weight_decay"), "train_instances": c.get("train_instances"),
-                    "seed": c.get("seed"), "train_jobs": jobs,
+                    # train_jobs only for models trained since the concurrent jobs (they record threads)
+                    "seed": c.get("seed"), "train_jobs": jobs if "threads" in m else np.nan,
                     # absent from models trained before these were recorded
                     "threads": m.get("threads", np.nan), "peak_rss_mb": m.get("peak_rss_mb", np.nan)}
         rows.extend(fam_rows.values())
@@ -430,7 +469,8 @@ def _order(values, order) -> list:
 def summarise(df: pd.DataFrame) -> pd.DataFrame:
     """Per (kind, budget, objective, k_frac, cell, operator): means of both gaps with the
     standard deviation over instances (of per-instance means) and over repeats (mean of
-    per-instance standard deviations), objective values, speed and time to 1 % of CEA."""
+    per-instance standard deviations), objective values, speed, time to 1 % of CEA and the
+    recorded destroy size k."""
     keys = ["kind", "budget", "objective", "k_frac", "cell", "operator"]
     per_inst = df.groupby(keys + ["instance"], dropna=False).agg(
         gc=("gap_cea_pct", "mean"), gb=("gap_best_pct", "mean"),
@@ -444,7 +484,8 @@ def summarise(df: pd.DataFrame) -> pd.DataFrame:
         mean_iters=("iterations", "mean"), mean_elapsed_s=("elapsed_ms", lambda x: x.mean() / 1000),
         iters_per_s=("iters_per_s", "mean"), reached_1pct=("reached_1pct", "mean"),
         mean_iters_to_1pct=("iters_to_1pct", "mean"), mean_secs_to_1pct=("secs_to_1pct", "mean"),
-        accept_rate=("accept_rate", "mean"), destroy_share=("destroy_share", "mean"), valid=("valid", "all"))
+        accept_rate=("accept_rate", "mean"), destroy_share=("destroy_share", "mean"), valid=("valid", "all"),
+        k=("k", "mean"))  # the destroy size, constant per cell and fraction
     s = main.join(spread).reset_index()
     rank = {"kind": KIND_ORDER, "cell": CELL_ORDER, "operator": OPERATORS}
     sort_cols = []
@@ -517,15 +558,52 @@ def md_table(header: list[str], rows: list[list]) -> list[str]:
     return out + [""]
 
 
-def gap_rows(s: pd.DataFrame, lead: list[str]) -> list[list]:
-    return [[*(getattr(r, c) for c in lead), r.operator, r.runs, _pm(r.mean_gap_cea_pct, r.sd_inst_gap_cea_pct),
-             _num(r.sd_rep_gap_cea_pct, ".2f"), _pm(r.mean_gap_best_pct, r.sd_inst_gap_best_pct),
-             _num(r.mean_best, ".1f"), _num(r.iters_per_s, ".0f")]
-            for r in s.itertuples()]
+def gap_rows(s: pd.DataFrame, lead: list[str], speed: bool = False) -> list[list]:
+    """Rows of a gap table; with `speed` a last it/s column, given for wall-time runs only
+    (iteration-budget runs share the machine with many parallel runs)."""
+    rows = []
+    for r in s.itertuples():
+        row = [*(_num(getattr(r, c), "g") if c == "k" else getattr(r, c) for c in lead), r.operator, r.runs,
+               _pm(r.mean_gap_cea_pct, r.sd_inst_gap_cea_pct), _num(r.sd_rep_gap_cea_pct, ".2f"),
+               _pm(r.mean_gap_best_pct, r.sd_inst_gap_best_pct), _num(r.mean_best, ".1f")]
+        if speed:
+            row.append(_num(r.iters_per_s, ".0f") if r.kind == "time" else "--")
+        rows.append(row)
+    return rows
 
 
 GAP_HEADER = ["operator", "runs", "gap to CEA % (± sd over instances)", "sd over repeats", "gap to best known %",
-              "objective (mean)", "it/s"]
+              "objective (mean)"]
+
+
+def k_for(n_orders: int, frac: float) -> int:
+    """The destroy size lns uses for a fraction of the orders (vrppd_lns::k_for):
+    max(3, round(frac * n)) with halves rounded away from zero, at most n."""
+    x = frac * n_orders
+    k = math.floor(x) + (x - math.floor(x) >= 0.5)
+    return min(max(k, 3), max(n_orders, 1))
+
+
+def ksweep_collapses(runs: pd.DataFrame) -> dict[str, list[tuple[int, list[float]]]]:
+    """Per class of the k-sweep runs, the destroy sizes k that several fractions of the sweep
+    (every fraction run for any class) give, with those fractions. The recorded k where a
+    fraction ran for the class, else k_for of the class's order count (run_all.sh runs only
+    the first fraction of each k)."""
+    ks = runs[runs.kind == "ksweep"]
+    fracs = sorted(ks.k_frac.unique())
+    out = {}
+    for cell in _order(ks.cell, CELL_ORDER):
+        sub = ks[ks.cell == cell]
+        recorded = sub.groupby("k_frac")["k"].mean()
+        n = int(sub.n_orders.iloc[0])
+        by_k: dict[int, list[float]] = {}
+        for f in fracs:
+            k = int(round(recorded[f])) if f in recorded.index else k_for(n, f)
+            by_k.setdefault(k, []).append(float(f))
+        collapsed = [(k, fs) for k, fs in sorted(by_k.items()) if len(fs) > 1]
+        if collapsed:
+            out[cell] = collapsed
+    return out
 
 
 # ---------------------------------------------------------------- figures
@@ -707,7 +785,7 @@ def aggregate(root: str) -> None:
     sel_path = os.path.join(root, "selection", "selection.json")
     if os.path.exists(sel_path):
         check_selection(sel_path)
-        check_neural_taus(runs, _read_json(sel_path))
+        check_neural_taus(runs, _read_json(sel_path), root)
     elif runs.operator.isin(NEURAL).any():
         notes.append("No selection/selection.json: the tau of the neural runs was not checked.")
     df = add_gaps(runs, refs)
@@ -742,7 +820,8 @@ def aggregate(root: str) -> None:
     md += ["Gap to CEA % is relative to the CEA reference of the instance (best of its runs, same objective); gap to "
            "best known % is relative to the best value known for the instance (CEA and all LNS runs). Means over "
            "instances and repeats; sd over instances is of per-instance means, sd over repeats the mean "
-           "per-instance sd.", ""]
+           "per-instance sd. it/s is given for wall-time runs only (iteration-budget runs share the machine with "
+           "many parallel runs).", ""]
 
     if not refs.empty:
         rr = refs.groupby(["objective", "cell"]).agg(instances=("instance", "nunique"), runs=("cea_runs", "max"),
@@ -758,17 +837,29 @@ def aggregate(root: str) -> None:
     s = summarise(df) if not df.empty else pd.DataFrame()
     if not s.empty:
         s.to_csv(os.path.join(root, "summary.csv"), index=False)
-        sections = [("main_iters", "Main comparison, iteration budget", (s.kind == "iters") & s.cell.isin(SMALL_CELLS), ["cell"]),
-                    ("main_time", "Main comparison, wall time", (s.kind == "time") & s.cell.isin(SMALL_CELLS), ["cell"]),
-                    ("ksweep", "Destroy size sweep", s.kind == "ksweep", ["cell", "k_frac"]),
-                    ("large", "Large classes", s.kind.isin(["iters", "time"]) & ~s.cell.isin(SMALL_CELLS), ["cell", "budget"]),
-                    ("objectives", "Price and empty-distance objectives", s.kind == "objective", ["objective", "cell"])]
-        for name, title, mask, lead in sections:
+        # (file, title, rows, lead columns, it/s column: tables with wall-time runs)
+        sections = [("main_iters", "Main comparison, iteration budget", (s.kind == "iters") & s.cell.isin(SMALL_CELLS),
+                     ["cell"], False),
+                    ("main_time", "Main comparison, wall time", (s.kind == "time") & s.cell.isin(SMALL_CELLS), ["cell"],
+                     True),
+                    ("ksweep", "Destroy size sweep", s.kind == "ksweep", ["cell", "k_frac", "k"], False),
+                    ("large", "Large classes", s.kind.isin(["iters", "time"]) & ~s.cell.isin(SMALL_CELLS),
+                     ["cell", "budget"], True),
+                    ("objectives", "Price and empty-distance objectives", s.kind == "objective", ["objective", "cell"],
+                     False)]
+        collapses = ksweep_collapses(df)
+        for name, title, mask, lead, speed in sections:
             sub = s[mask]
             if sub.empty:
                 continue
-            rows = gap_rows(sub, lead)
-            md += [f"## {title}", ""] + md_table(lead + GAP_HEADER, rows)
+            rows = gap_rows(sub, lead, speed)
+            md += [f"## {title}", ""] + md_table(lead + GAP_HEADER + (["it/s"] if speed else []), rows)
+            if name == "ksweep" and collapses:
+                md += ["k = max(3, round(fraction x orders)) is the same for several fractions of the sweep: "
+                       + "; ".join(f"{cell}: " + ", ".join(f"k = {k} for fractions {', '.join(f'{f:g}' for f in fs)}"
+                                                          for k, fs in groups)
+                                   for cell, groups in collapses.items())
+                       + ". Each such k is run and drawn once, at its smallest fraction.", ""]
             write_tex(os.path.join(tabdir, f"{name}.tex"), rows)
 
         st = paired_tests(df)
@@ -786,9 +877,10 @@ def aggregate(root: str) -> None:
 
         fig_search_curves(df, curves, "iters", os.path.join(figdir, "search_curves_iters.png"))
         fig_search_curves(df, curves, "time", os.path.join(figdir, "search_curves_time.png"))
-        ks = s[s.kind == "ksweep"]
-        fig_by_x(ks, [(c, ks[ks.cell == c]) for c in _order(ks.cell, CELL_ORDER)], "k_frac",
-                 "destroy size (fraction of orders)", os.path.join(figdir, "k_sweep.png"))
+        # x = the recorded k; fractions giving the same k (identical runs) are drawn once
+        ks = s[s.kind == "ksweep"].sort_values("k_frac").drop_duplicates(["cell", "operator", "k"])
+        fig_by_x(ks, [(c, ks[ks.cell == c]) for c in _order(ks.cell, CELL_ORDER)], "k",
+                 "destroy size k (orders removed)", os.path.join(figdir, "k_sweep.png"))
         lg = s[s.kind.isin(["iters", "time"]) & ~s.cell.isin(SMALL_CELLS)]
         fig_by_x(lg, [("iteration budget", lg[lg.kind == "iters"]), ("wall-time budget", lg[lg.kind == "time"])],
                  "cell", "class", os.path.join(figdir, "large_classes.png"), categorical=True)
@@ -818,9 +910,9 @@ def aggregate(root: str) -> None:
                 continue
             seeds = t.group.str.startswith("seeds ")
             rows = [[r.group, r.name, _num(r.params, ".0f"), _num(r.spearman, ".3f"), _num(r.p_at_k, ".3f"),
-                     _num(r.p_at_k_best_try, ".3f"), _num(r.best_epoch, ".1f" if s else ".0f"),
+                     _num(r.p_at_k_best_try, ".3f"), _num(r.best_epoch, ".1f" if seed_stat else ".0f"),
                      _num(r.train_seconds, ".0f")]
-                    for r, s in zip(t.itertuples(), seeds)]
+                    for r, seed_stat in zip(t.itertuples(), seeds)]
             md += [f"### {family.upper()}", "",
                    "Validation metrics at the kept epoch: Spearman and p@k against the model's own training target "
                    "(mean or top), p@k best try = share of the predicted top k inside the state's best try (the "
