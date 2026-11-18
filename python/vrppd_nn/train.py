@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--width", type=int, default=64)
     ap.add_argument("--target", choices=["mean", "top"], default="mean", help="label field to learn")
     ap.add_argument("--select-by", choices=["spearman", "p_at_k"], default="p_at_k",
-                    help="validation metric choosing the best epoch (higher is better)")
+                    help="validation metric recorded as selection_value, used to rank configurations (epochs stay on val loss)")
     ap.add_argument("--train-instances", type=int, default=None, help="train on all states of N instances (nested)")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     ap.add_argument("--depth", type=int, default=2)
@@ -129,7 +129,7 @@ def main(argv: list[str] | None = None) -> None:
     loss_fn = masked_mse if args.loss == "mse" else listnet_loss
 
     metric_key = "spearman" if args.select_by == "spearman" else "precision_at_k"
-    best_score, best_val, best_epoch, best_state = float("-inf"), float("nan"), -1, None
+    best_val, best_epoch, best_state = float("inf"), -1, None
     rows = []
     t_train = time.time()
     for epoch in range(1, args.epochs + 1):
@@ -141,10 +141,8 @@ def main(argv: list[str] | None = None) -> None:
         met = evaluate_predictions(val_states, preds)
         rows.append((epoch, tr, va, met["spearman"], met["precision_at_k"]))
         print(f"epoch {epoch:3d} train {tr:.4f} val {va:.4f} spearman {met['spearman']:.4f} p@k {met['precision_at_k']:.4f}", flush=True)
-        score = met[metric_key]
-        score = float("-inf") if np.isnan(score) else score
-        if best_state is None or score > best_score + 1e-6:
-            best_score, best_val, best_epoch = score, va, epoch
+        if best_state is None or va < best_val - 1e-6:
+            best_val, best_epoch = va, epoch
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
         elif epoch - best_epoch >= args.patience:
             print(f"early stop at epoch {epoch} (best {best_epoch})")
@@ -159,7 +157,7 @@ def main(argv: list[str] | None = None) -> None:
                 "n_train_states": len(train_states), "n_val_states": len(val_states),
                 "n_params": sum(p.numel() for p in model.parameters()),
                 "n_parameters": sum(p.numel() for p in model.parameters()),
-                "select_by": args.select_by, "target": args.target,
+                "select_by": args.select_by, "selection_value": met[metric_key], "target": args.target,
                 "train_loss_curve": [r[1] for r in rows], "val_loss_curve": [r[2] for r in rows]})
     with open(os.path.join(args.out, "loss_curve.csv"), "w") as f:
         f.write("epoch,train_loss,val_loss,val_spearman,val_p_at_k\n")

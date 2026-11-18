@@ -31,3 +31,13 @@ def test_train_options_top_width_and_instances(tmp_path, write_labels):
     assert met["n_train_states"] == 8 and met["target"] == "top"
     w = json.load(open(out / "weights.json"))
     assert len(w["layers"][0]["weight"]) == 256
+
+
+def test_select_by_is_recorded_and_epoch_stays_on_val_loss(tmp_path, write_labels):
+    out = run(tmp_path, write_labels, "--select-by", "p_at_k", epochs=4)
+    met = json.load(open(out / "metrics.json"))
+    assert met["select_by"] == "p_at_k"
+    assert met["selection_value"] == met["precision_at_k"]
+    curve = met["val_loss_curve"]
+    assert met["best_epoch"] == int(np.argmin(curve)) + 1
+    assert met["best_val_loss"] == min(curve)
