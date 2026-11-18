@@ -1,6 +1,18 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# vrppd-py is a Python extension module built with maturin; plain `cargo`
+# commands leave it out so they do not need Python.
+default-members = [
+  "crates/vrppd-benchmarks",
+  "crates/vrppd-brute-force",
+  "crates/vrppd-cea",
+  "crates/vrppd-core",
+  "crates/vrppd-lns",
+  "crates/vrppd-milp",
+  "crates/vrppd-or-tools",
+  "crates/vrppd-psa",
+]
 
 [workspace.package]
 edition = "2024"

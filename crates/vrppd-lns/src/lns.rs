@@ -65,6 +65,41 @@ pub fn default_k(n_orders: usize) -> usize {
   k_for(n_orders, 0.15)
 }
 
+/// Simulated-annealing temperature schedule of [`run_lns`]: a solution
+/// `cfg.start_temp_control` (fraction) worse than the initial one is accepted
+/// with probability 0.5 at the start, and the temperature falls geometrically
+/// to `cfg.end_temp_ratio` of its start value at the end.
+#[derive(Clone, Copy, Debug)]
+pub struct Annealing {
+  t0: f64,
+  t_end_ratio: f64,
+}
+
+impl Annealing {
+  pub fn new(cfg: &LnsConfig, initial_obj: f64) -> Self {
+    Self {
+      t0: cfg.start_temp_control * initial_obj.max(1e-9) / std::f64::consts::LN_2,
+      t_end_ratio: cfg.end_temp_ratio.max(1e-12),
+    }
+  }
+
+  /// Temperature at search progress `progress` (0 = start, 1 or more = end).
+  pub fn temperature(&self, progress: f64) -> f64 {
+    self.t0 * self.t_end_ratio.powf(progress.min(1.0))
+  }
+}
+
+/// Simulated-annealing acceptance of an objective change `delta` (candidate
+/// minus current): improvements always, anything else with probability
+/// `exp(-delta / temperature)`. Draws one uniform from `rng` only when `delta`
+/// is not an improvement.
+pub fn sa_accept(delta: f64, temperature: f64, rng: &mut impl Rng) -> bool {
+  delta < -1e-9 || {
+    let p: f64 = rng.r#gen();
+    p < (-delta / temperature).exp()
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CurveRow {
   pub iteration: u64,
@@ -145,8 +180,7 @@ pub fn run_lns(
   let mut best_obj = current_obj;
   let initial_obj = current_obj;
 
-  let t0 = cfg.start_temp_control * initial_obj.max(1e-9) / std::f64::consts::LN_2;
-  let t_end_ratio = cfg.end_temp_ratio.max(1e-12);
+  let annealing = Annealing::new(cfg, initial_obj);
 
   let mut curve = vec![CurveRow {
     iteration: 0,
@@ -184,7 +218,7 @@ pub fn run_lns(
       panic!("LnsConfig needs max_iters or max_secs");
     }
     iter += 1;
-    let temperature = t0 * t_end_ratio.powf(progress.min(1.0));
+    let temperature = annealing.temperature(progress);
 
     let td = Instant::now();
     let removed = op.select(ctx, &current, k, &mut rng);
@@ -201,10 +235,7 @@ pub fn run_lns(
 
     let cand_obj = ctx.objective_value(&candidate);
     let delta = cand_obj - current_obj;
-    let accept = delta < -1e-9 || {
-      let p: f64 = rng.r#gen();
-      p < (-delta / temperature).exp()
-    };
+    let accept = sa_accept(delta, temperature, &mut rng);
 
     let outcome = if cand_obj < best_obj - 1e-9 {
       Outcome::NewBest
@@ -291,7 +322,8 @@ pub fn run_lns(
   }
 }
 
-fn shuffle<T>(v: &mut [T], rng: &mut Xoshiro256StarStar) {
+/// Fisher-Yates shuffle (the random reinsertion order of [`run_lns`]'s repair).
+pub fn shuffle<T>(v: &mut [T], rng: &mut Xoshiro256StarStar) {
   for i in (1..v.len()).rev() {
     let j = rng.gen_range(0..=i);
     v.swap(i, j);

@@ -1,0 +1,22 @@
+[package]
+name = "vrppd-py"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Python module vrppd_py: the LNS destroy, greedy repair and simulated-annealing acceptance as a batched environment for training destroy policies."
+
+[lib]
+name = "vrppd_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+vrppd-core = { workspace = true }
+vrppd-lns = { workspace = true }
+rand = { workspace = true }
+rand_xoshiro = { workspace = true }
+rayon = { workspace = true }
+serde_json = { workspace = true }
+pyo3 = { version = "0.30", features = ["abi3-py312"] }
+self_cell = "1"
