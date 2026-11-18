@@ -14,12 +14,14 @@
 # later batch needs its outputs and they are missing (instances and labels are never pulled from
 # a host, so a new host regenerates `data` from the seeds). Inside a batch every existing output
 # is skipped: run files, reference records, models with metrics.json, V2 runs with DONE (V2 runs
-# always resume). A finished batch writes batches/<batch>/manifest.json, then DONE.
+# always resume). A batch writes batches/<batch>/manifest.json, then DONE, only after checking that
+# every output it registered is complete (run files per directory, reference records, finish markers).
 # Iteration-budget runs use ITER_THREADS. Wall-time work (60 s runs, CEA references) runs under
-# `taskset -c $TIMED_CPUS` with TIMED_THREADS, and a wall-time batch started on another host is
-# refused (its results would mix machines). One pipeline at a time: lock <root>/pipeline.pid.
+# `taskset -c $TIMED_CPUS` with TIMED_THREADS. A wall-time batch started on another host is refused,
+# and so are wall-time runs whose class's CEA references (or earlier runs) come from another
+# host, thread count or CPU list. One pipeline at a time: lock <root>/pipeline.pid.
 set -euo pipefail
-shopt -s nullglob
+shopt -s nullglob inherit_errexit
 cd "$(dirname "$0")/../.."
 REPO="$(pwd)"
 
@@ -118,7 +120,9 @@ print(v)' "$1" "$2"
 cfg_fields() { "$PY" -c 'import json, sys; c = json.load(open(sys.argv[1])); print(*[c[k] for k in sys.argv[2:]])' "$@"; }
 sel() { json_get "$ROOT/selection/selection.json" "$1"; }
 pick_best() { "$PY" -m vrppd_nn.aggregate3 pick-best "$@"; }
-count_json() { find "$1" -maxdepth 1 -name '*.json' 2> /dev/null | wc -l | tr -d ' '; }
+count_json() {
+  if [[ -d $1 ]]; then find "$1" -maxdepth 1 -name '*.json' | wc -l | tr -d ' '; else echo 0; fi
+}
 pin() { if [[ -n $TIMED_CPUS ]]; then taskset -c "$TIMED_CPUS" "$@"; else "$@"; fi; }
 cpu_model() {
   if [[ -r /proc/cpuinfo ]]; then grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//'
@@ -131,9 +135,65 @@ check_disk() {
   ((gb >= 10)) || die "only ${gb} GB free under $ROOT"
 }
 
-run_lns() { # out iters|timed lns-args...
-  local out=$1 mode=$2
+# What a batch must leave behind ("runs|dir|n": exactly n run files, "refs|file|n|runs": n reference
+# records of `runs` runs each, "file|path"); checked before DONE is written.
+expect() {
+  local IFS='|'
+  EXPECT+=("$*")
+}
+
+verify_outputs() {
+  local e kind path n runs missing=()
+  for e in "${EXPECT[@]}"; do
+    IFS='|' read -r kind path n runs <<< "$e"
+    case $kind in
+      runs) [[ $(count_json "$path") == "$n" ]] || missing+=("$path: $(count_json "$path") run files, expected $n") ;;
+      file) [[ -f $path ]] || missing+=("$path: missing") ;;
+      refs)
+        "$PY" - "$path" "$n" "$runs" << 'EOF' || missing+=("$path: expected $n records of $runs runs")
+import json, os, sys
+path, n, runs = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+records = json.load(open(path)) if os.path.exists(path) else []
+sys.exit(0 if len(records) == n and all(len(r["runs"]) == runs for r in records) else 1)
+EOF
+        ;;
+    esac
+  done
+  if ((${#missing[@]})); then
+    printf '  %s\n' "${missing[@]}" >&2
+    die "batch $BATCH is incomplete (${#missing[@]} outputs above); DONE not written"
+  fi
+}
+
+# Wall-time results of one class must share one setup: the class's CEA reference records and any
+# run files already in the given directories must match this host, TIMED_THREADS and CPU_LIST.
+check_timed_setup() { # reference-file run-dir...
+  "$PY" - "$HOST_NAME" "$TIMED_THREADS" "$CPU_LIST" "$@" << 'EOF' || die "the wall-time files above do not match this setup (host $HOST_NAME, threads $TIMED_THREADS, cpus $CPU_LIST): rerun the class's references here (delete $1 and its batch directory under batches/, and the listed run directories), then restart"
+import glob, json, os, sys
+want = (sys.argv[1], int(sys.argv[2]), sys.argv[3])
+ref, dirs = sys.argv[4], sys.argv[5:]
+if not os.path.exists(ref):
+    sys.exit(f"  {ref}: missing (a class's references must exist before its wall-time runs)")
+found = [(f"{ref} instance {r['instance']}", r) for r in json.load(open(ref))]
+found += [(p, json.load(open(p))) for d in dirs for p in sorted(glob.glob(os.path.join(d, "*.json")))]
+bad = [f"  {name}: host={r.get('host', '')!r} threads={r.get('threads', 0)} cpus={r.get('cpu_list', '')!r}"
+       for name, r in found if (r.get("host", ""), r.get("threads", 0), r.get("cpu_list", "")) != want]
+if bad:
+    more = [f"  ... {len(bad) - 10} more"] if len(bad) > 10 else []
+    print("\n".join(bad[:10] + more), file=sys.stderr)
+    sys.exit(1)
+EOF
+}
+
+run_lns() { # out iters|timed lns-args (with --max-instances, optionally --repeats)
+  local out=$1 mode=$2 n="" r=1 a prev=""
   shift 2
+  for a in "$@"; do
+    case $prev in --max-instances) n=$a ;; --repeats) r=$a ;; esac
+    prev=$a
+  done
+  [[ -n $n ]] || die "run_lns $out: --max-instances missing"
+  expect runs "$out" $((n * r))
   if [[ $mode == timed ]]; then
     pin "$BIN/lns" "$@" --out "$out" --threads "$TIMED_THREADS" --host-tag "$HOST_NAME" --cpu-list "$CPU_LIST"
   else
@@ -143,6 +203,7 @@ run_lns() { # out iters|timed lns-args...
 }
 
 run_ref() { # out cell runs instances objective
+  expect refs "$1" "$4" "$3"
   pin "$BIN/cea_ref" --cell "$2" --objective "$5" --runs "$3" --seconds "$REF_SECONDS" --threads "$TIMED_THREADS" \
     --max-instances "$4" --out "$1" --host-tag "$HOST_NAME" --cpu-list "$CPU_LIST"
   RUNS=$((RUNS + $("$PY" -c 'import json, sys; print(len(json.load(open(sys.argv[1]))))' "$1")))
@@ -163,6 +224,7 @@ train_model() { # module out train-args...; models are ranked by precision at k 
   local module=$1 out=$2
   shift 2
   RUNS=$((RUNS + 1))
+  expect file "$out/metrics.json"
   if [[ -f $out/metrics.json ]]; then return; fi
   mkdir -p "$out"
   "$PY" -m "vrppd_nn.$module" --train "$LABELS/train.jsonl" --val "$LABELS/val.jsonl" --out "$out" --device auto \
@@ -174,6 +236,7 @@ train_model() { # module out train-args...; models are ranked by precision at k 
 }
 
 write_best() { # path best seeds trainsize ("n=dir ...")
+  expect file "$1"
   "$PY" - "$@" << 'EOF'
 import json, os, sys
 path, best, seeds, sizes = sys.argv[1:5]
@@ -199,6 +262,10 @@ batch_data() {
   gen val 10_20 10 20 "$N_VAL_A" 20261113
   gen val 20_50 20 50 "$N_VAL_B" 20261114
   RUNS=$((N_TRAIN_A + N_TRAIN_B + N_VAL_A + N_VAL_B))
+  expect runs "$INST/train/10_20" "$N_TRAIN_A"
+  expect runs "$INST/train/20_50" "$N_TRAIN_B"
+  expect runs "$INST/val/10_20" "$N_VAL_A"
+  expect runs "$INST/val/20_50" "$N_VAL_B"
   mkdir -p "$LABELS" "$ROOT/label_stats"
   local split cell seed
   for split in train val; do
@@ -214,19 +281,22 @@ batch_data() {
       LC_ALL=C sort -s -t, -k1,1 "$LABELS/${split}_10_20.jsonl" "$LABELS/${split}_20_50.jsonl" > "$LABELS/$split.jsonl.tmp"
       mv "$LABELS/$split.jsonl.tmp" "$LABELS/$split.jsonl"
     fi
+    expect file "$LABELS/$split.jsonl"
+    expect file "$ROOT/label_stats/stats_$split.json"
     [[ -f $ROOT/label_stats/stats_$split.json ]] || "$PY" -m vrppd_nn.label_stats --labels "$LABELS/$split.jsonl" \
       --out "$ROOT/label_stats/stats_$split.json" --md "$ROOT/label_stats/stats_$split.md" > /dev/null
   done
 }
 
 batch_b0() {
-  local grid="$MODELS/b0/grid" loss target w d n s best name cfg bw bd bl bt sizes="" seeds=""
+  local grid="$MODELS/b0/grid" loss target w d n s best name cfg fields bw bd bl bt sizes="" seeds=""
   for loss in $LOSSES; do for target in $TARGETS; do for w in $B0_WIDTHS; do for d in $B0_DEPTHS; do
     train_model train "$grid/w${w}_d${d}_${loss}_${target}_s0" --width "$w" --depth "$d" --loss "$loss" --target "$target" --seed 0
   done; done; done; done
   best=$(pick_best "$grid"/*)
   name=$(basename "$best") cfg=${name%_s0}
-  read -r bw bd bl bt < <(cfg_fields "$best/config.json" width depth loss target)
+  fields=$(cfg_fields "$best/config.json" width depth loss target)
+  read -r bw bd bl bt <<< "$fields"
   log "best B0 configuration (validation selection_value): $cfg"
   for n in $TRAIN_SIZES; do
     if ((n >= N_TRAIN_A + N_TRAIN_B)); then # every instance: the grid run itself
@@ -249,21 +319,26 @@ batch_b0() {
 }
 
 batch_v1() {
-  local loss target d a p wd s best rel name cfg sd sa bd ba bp bwd seeds=""
-  read -r loss target < <(cfg_fields "$(pick_best "$MODELS/b0/grid"/*)/config.json" loss target)
+  local loss target d a p wd s best rel name cfg fields sd sa bd ba bp bwd seeds=""
+  best=$(pick_best "$MODELS/b0/grid"/*)
+  fields=$(cfg_fields "$best/config.json" loss target)
+  read -r loss target <<< "$fields"
   v1_train() { train_model train_v1 "$1" --instances-root "$INST" --loss "$loss" --target "$target" "${@:2}"; }
   for d in $V1_DS; do for a in $V1_NATTS; do
     v1_train "$MODELS/v1/grid/d${d}_a${a}_do${V1_BASE_DROPOUT}_wd${V1_BASE_WD}_s0" --d "$d" --n-att "$a" --seed 0 \
       --dropout "$V1_BASE_DROPOUT" --weight-decay "$V1_BASE_WD"
   done; done
-  read -r sd sa < <(cfg_fields "$(pick_best "$MODELS/v1/grid"/*)/config.json" d n_att)
+  best=$(pick_best "$MODELS/v1/grid"/*)
+  fields=$(cfg_fields "$best/config.json" d n_att)
+  read -r sd sa <<< "$fields"
   for p in $V1_DROPOUTS; do for wd in $V1_WDS; do
     [[ $p == "$V1_BASE_DROPOUT" && $wd == "$V1_BASE_WD" ]] && continue # the size-grid run
     v1_train "$MODELS/v1/reg/d${sd}_a${sa}_do${p}_wd${wd}_s0" --d "$sd" --n-att "$sa" --seed 0 --dropout "$p" --weight-decay "$wd"
   done; done
   best=$(pick_best "$MODELS/v1/grid"/* "$MODELS/v1/reg"/*)
   rel=${best#"$MODELS/v1/"} name=$(basename "$best") cfg=${name%_s0}
-  read -r bd ba bp bwd < <(cfg_fields "$best/config.json" d n_att dropout weight_decay)
+  fields=$(cfg_fields "$best/config.json" d n_att dropout weight_decay)
+  read -r bd ba bp bwd <<< "$fields"
   log "best V1 configuration (validation selection_value): $rel"
   for s in $SEEDS; do
     if [[ $s == 0 ]]; then
@@ -277,14 +352,17 @@ batch_v1() {
 }
 
 batch_v2() { # a | b | c | d | e
-  local out="$MODELS/v2/$1" v1dir args=()
+  local out="$MODELS/v2/$1" v1dir fields args=()
   v1dir="$MODELS/v1/$(json_get "$MODELS/v1/best.json" best)"
   RUNS=1
+  expect file "$out/DONE"
+  expect file "$out/weights.json"
   if [[ -f $out/DONE ]]; then return; fi
   case $1 in
     a) args=(--init "$v1dir/weights.json" --samples 4 --entropy-beta 0.01) ;;
     b) # from scratch with the best V1 architecture and dropout
-      read -r -a args < <(cfg_fields "$v1dir/config.json" d heads n_att dropout)
+      fields=$(cfg_fields "$v1dir/config.json" d heads n_att dropout)
+      read -r -a args <<< "$fields"
       args=(--d "${args[0]}" --heads "${args[1]}" --n-att "${args[2]}" --dropout "${args[3]}" --samples 4 --entropy-beta 0.01) ;;
     c) args=(--init "$v1dir/weights.json" --samples 1 --entropy-beta 0.01) ;;
     d) args=(--init "$v1dir/weights.json" --samples 8 --entropy-beta 0.01) ;;
@@ -313,6 +391,7 @@ batch_select() {
         --repeats "$SEL_REPEATS" --iters "$SEL_ITERS" --log-every 0 --operator neural --weights "$ROOT/${spec#*=}" --tau "$tau"
     done; done
   done
+  expect file "$ROOT/selection/selection.json"
   "$PY" -m vrppd_nn.aggregate3 select --root "$ROOT" --val-dir "$INST/val" "${margs[@]}"
 }
 
@@ -327,6 +406,7 @@ batch_iters() { # cell
 
 batch_time() { # cell
   local op
+  check_timed_setup "$REFS/cea_ref_$1.json" "$LNS/time${TIME_BUDGET}s"/*/"$1"
   for op in $OPERATORS; do
     op_args "$op"
     run_lns "$LNS/time${TIME_BUDGET}s/$op/$1" timed --cell "$1" --max-instances "$TEST_INST" --repeats "$REPEATS" \
@@ -334,11 +414,15 @@ batch_time() { # cell
   done
 }
 
-batch_ref() { run_ref "$REFS/cea_ref_$1.json" "$1" "$REF_RUNS" "$TEST_INST" distance; }
+batch_ref() { # cell; a resumed reference file must not mix setups either
+  run_ref "$REFS/cea_ref_$1.json" "$1" "$REF_RUNS" "$TEST_INST" distance
+  check_timed_setup "$REFS/cea_ref_$1.json"
+}
 
 batch_ksweep() {
-  local k op cell
-  for k in $KFRACS; do for op in random adaptive "$(sel best_model.operator)"; do
+  local k op cell best
+  best=$(sel best_model.operator)
+  for k in $KFRACS; do for op in random adaptive "$best"; do
     op_args "$op"
     for cell in $TEST_CELLS; do
       run_lns "$LNS/ksweep-k$k/$op/$cell" iters --cell "$cell" --max-instances "$TEST_INST" --repeats "$REPEATS" \
@@ -376,6 +460,7 @@ batch_large() { # cell: references, then both budgets for random, adaptive, best
   run_ref "$REFS/cea_ref_$1.json" "$1" "$LARGE_REF_RUNS" "$LARGE_INST" distance
   if [[ $1 == 100_500 ]]; then
     iters=$(large_iters "$1" "$best")
+    expect file "$ROOT/batches/large-$1/probe.json"
     log "100_500 iteration budget: $iters ($(cat "$ROOT/batches/large-$1/probe.json" | tr -d '\n '))"
   fi
   for op in random adaptive "$best" adaptive_n; do
@@ -383,6 +468,7 @@ batch_large() { # cell: references, then both budgets for random, adaptive, best
     run_lns "$LNS/iters$iters/$op/$1" iters --cell "$1" --max-instances "$LARGE_INST" --repeats "$LARGE_REPEATS" \
       --iters "$iters" --log-every 10 "${OP_ARGS[@]}"
   done
+  check_timed_setup "$REFS/cea_ref_$1.json" "$LNS/time${TIME_BUDGET}s"/*/"$1"
   for op in random adaptive "$best" adaptive_n; do
     op_args "$op"
     run_lns "$LNS/time${TIME_BUDGET}s/$op/$1" timed --cell "$1" --max-instances "$LARGE_INST" --repeats "$LARGE_REPEATS" \
@@ -391,9 +477,10 @@ batch_large() { # cell: references, then both budgets for random, adaptive, best
 }
 
 batch_obj() { # price | empty: references, then the four operators on the small test classes
-  local op cell
+  local op cell best
+  best=$(sel best_model.operator)
   for cell in $TEST_CELLS; do run_ref "$REFS/objective_$1/cea_ref_$cell.json" "$cell" "$OBJ_REF_RUNS" "$TEST_INST" "$1"; done
-  for op in random adaptive "$(sel best_model.operator)" adaptive_n; do
+  for op in random adaptive "$best" adaptive_n; do
     op_args "$op"
     for cell in $TEST_CELLS; do
       run_lns "$LNS/objective_$1/$op/$cell" iters --cell "$cell" --objective "$1" --max-instances "$TEST_INST" \
@@ -414,6 +501,7 @@ outputs_ok() { # what later batches read from a finished batch is present here
       [[ -f $LABELS/train.jsonl && -f $LABELS/val.jsonl ]] ;;
     b0 | v1) [[ -f $MODELS/$1/best.json ]] ;;
     v2-*) x=${1#v2-} && [[ -f $MODELS/v2/$x/DONE && -f $MODELS/v2/$x/weights.json ]] ;;
+    ref-*) [[ -f $REFS/cea_ref_${1#ref-}.json ]] ;;
     select) [[ -f $ROOT/selection/selection.json ]] ;;
     *) return 0 ;;
   esac
@@ -425,7 +513,8 @@ prereqs() {
     v1) echo data b0 ;;
     v2-*) echo data v1 ;;
     select) echo data b0 v1 v2-a v2-b v2-c v2-d v2-e ;;
-    iters-* | time-* | ksweep | large-* | obj-*) echo select ;;
+    time-*) echo select "ref-${1#time-}" ;; # wall-time runs need their class's references first
+    iters-* | ksweep | large-* | obj-*) echo select ;;
   esac
 }
 
@@ -442,7 +531,7 @@ run_batch() {
   else
     echo "$HOST_NAME $(date '+%FT%T')" > "$d/STARTED"
   fi
-  BATCH_T0=$(date '+%FT%T') RUNS=0
+  BATCH=$b BATCH_T0=$(date '+%FT%T') RUNS=0 EXPECT=()
   log "=== batch $b: start"
   case $b in
     data) batch_data ;;
@@ -457,6 +546,7 @@ run_batch() {
     large-*) batch_large "${b#large-}" ;;
     obj-*) batch_obj "${b#obj-}" ;;
   esac
+  verify_outputs
   "$PY" - "$d/manifest.json" "$b" "$HOST_NAME" "$(cpu_model)" "$TIMED_CPUS" "$ITER_THREADS" "$TIMED_THREADS" \
     "$(git_commit)" "$BATCH_T0" "$(date '+%FT%T')" "$RUNS" "$SMOKE" << 'EOF'
 import json, os, sys
