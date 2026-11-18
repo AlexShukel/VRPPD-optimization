@@ -28,8 +28,8 @@ writes to `results/stage2/` and appends the result tables to
 
 ## Stage 3: reproduce
 
-Prerequisites: Rust (stable), Python 3.12 with `uv`, and on the compute host a CUDA
-build of torch. The test instances (`problem-gen/problems/`) and the generator pools
+Prerequisites: Rust (stable), Python 3.12 with `uv`, bash ≥ 5.1 for the scripts
+(macOS: Homebrew bash), and on the compute host a CUDA build of torch. The test instances (`problem-gen/problems/`) and the generator pools
 (`problem-gen/data/`) are not in git; copy them next to the code first.
 
 One host file per machine, `scripts/stage3/hosts/<name>.env`, sets the CPU list and
