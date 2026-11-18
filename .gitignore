@@ -11,7 +11,14 @@ results/stage2/pipeline.pid
 *.json.tmp
 results/stage2/models/**/val_predictions.jsonl
 results/stage2/pipeline.pid
-results/stage3/{instances,labels,lns,selection}/
-results/stage3-smoke/
+results/stage3/instances/
+results/stage3/labels/
+results/stage3/lns/
+results/stage3/pipeline.log
 results/stage3/pipeline.pid
 results/stage3/models/**/val_predictions.jsonl
+results/stage3/models/**/checkpoint.pt
+results/stage3/models/**/train.log
+results/stage3/batches/*/STARTED
+results/stage3/batches/*/probe/
+results/stage3-smoke/
