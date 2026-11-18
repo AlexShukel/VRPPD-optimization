@@ -1,6 +1,7 @@
 """Validation metrics for per-order scores: MSE on z-scores (predictions z-scored
 per state), mean per-state Spearman, precision@k (overlap of predicted and true
-top-k), and recall of the best try's set."""
+top-k), recall of the best try's set, and precision@k against the best try (share
+of the predicted top-k inside the best try; independent of the training target)."""
 from __future__ import annotations
 
 import numpy as np
@@ -10,7 +11,7 @@ from vrppd_nn.data import State, zscore
 
 
 def evaluate_predictions(states: list[State], preds: list[np.ndarray]) -> dict:
-    mses, rhos, pks, best_hits, rand_pks = [], [], [], [], []
+    mses, rhos, pks, best_hits, best_pks, rand_pks = [], [], [], [], [], []
     for s, p in zip(states, preds):
         m = s.mask
         if m.sum() < 3:
@@ -26,6 +27,7 @@ def evaluate_predictions(states: list[State], preds: list[np.ndarray]) -> dict:
         pks.append(len(top_pred & top_true) / k)
         rand_pks.append(k / int(m.sum()))
         best = set(np.where(s.in_best)[0])
+        best_pks.append(len(top_pred & best) / k)
         if best:
             best_hits.append(len(top_pred & best) / len(best))
     return {
@@ -34,6 +36,7 @@ def evaluate_predictions(states: list[State], preds: list[np.ndarray]) -> dict:
         "precision_at_k": float(np.mean(pks)) if pks else float("nan"),
         "precision_at_k_random": float(np.mean(rand_pks)) if rand_pks else float("nan"),
         "best_set_recall": float(np.mean(best_hits)) if best_hits else float("nan"),
+        "p_at_k_best_try": float(np.mean(best_pks)) if best_pks else float("nan"),
         "n_states": len(rhos),
         "spearman_per_state": rhos,
     }

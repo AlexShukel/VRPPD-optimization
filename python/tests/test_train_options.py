@@ -4,6 +4,8 @@ import os
 import numpy as np
 
 from vrppd_nn import fileio, train
+from vrppd_nn.data import State, zscore
+from vrppd_nn.metrics import evaluate_predictions
 from vrppd_nn.model import forward_numpy
 
 
@@ -58,3 +60,30 @@ def test_every_output_is_written_as_tmp_then_renamed(tmp_path, write_labels, mon
     assert files == ["config.json", "loss_curve.csv", "metrics.json", "val_predictions.jsonl", "weights.json"]
     assert sorted(renames) == sorted((str(out / f) + ".tmp", str(out / f)) for f in files)
     assert renames[-1][1].endswith("metrics.json")  # written last: its presence marks a finished run
+
+
+def state_with_best_try(best: list[int], n: int = 8, k: int = 3) -> State:
+    scores = np.linspace(-1.0, 1.0, n)
+    z, mask = zscore(scores)
+    in_best = np.zeros(n, dtype=bool)
+    in_best[best] = True
+    return State(instance="i", cell="c", iteration=0, k=k, features=np.zeros((n, 8)), scores=scores, z=z,
+                 mask=mask, in_best=in_best, try_improvements=np.zeros(2), objective=1.0)
+
+
+def test_p_at_k_best_try_is_share_of_top_k_in_best_try():
+    pred = np.array([9.0, 8.0, 7.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # model's top 3: orders 0, 1, 2
+    same, disjoint, one = (state_with_best_try(b) for b in ([0, 1, 2], [5, 6, 7], [2, 6, 7]))
+    assert evaluate_predictions([same], [pred])["p_at_k_best_try"] == 1.0
+    assert evaluate_predictions([disjoint], [pred])["p_at_k_best_try"] == 0.0
+    met = evaluate_predictions([same, disjoint, one], [pred] * 3)
+    assert met["p_at_k_best_try"] == (1.0 + 0.0 + 1 / 3) / 3
+
+
+def test_select_by_best_try_records_its_value(tmp_path, write_labels):
+    out = run(tmp_path, write_labels, "--select-by", "best_try")
+    with open(out / "metrics.json") as f:
+        met = json.load(f)
+    assert met["select_by"] == "best_try"
+    assert met["selection_value"] == met["p_at_k_best_try"]
+    assert 0.0 <= met["p_at_k_best_try"] <= 1.0

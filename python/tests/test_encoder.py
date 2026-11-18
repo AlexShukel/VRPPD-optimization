@@ -213,6 +213,7 @@ def test_train_v1_two_epochs(tmp_path):
     met = json.load(open(out / "metrics.json"))
     assert len(met["train_loss_curve"]) == 2 and met["n_train_states"] == 12 and met["n_val_states"] == 6
     assert met["best_epoch"] == int(np.argmin(met["val_loss_curve"])) + 1
+    assert 0.0 <= met["p_at_k_best_try"] <= 1.0  # the target-independent metric, shared with B0
     assert sorted(os.listdir(out)) == ["config.json", "loss_curve.csv", "metrics.json", "val_predictions.jsonl",
                                        "weights.json"]
     model, mean, _std = load_json(str(out / "weights.json"))

@@ -53,6 +53,8 @@ def listnet_loss(pred: torch.Tensor, y: torch.Tensor, mask: torch.Tensor) -> tor
 
 
 LOSSES = {"mse": masked_mse, "rank": listnet_loss}
+# --select-by choice -> key of evaluate_predictions stored as selection_value
+SELECT_BY = {"spearman": "spearman", "p_at_k": "precision_at_k", "best_try": "p_at_k_best_try"}
 
 
 def model_device(model: nn.Module) -> torch.device:
@@ -110,8 +112,9 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--val", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--target", choices=["mean", "top"], default="mean", help="label field to learn")
-    ap.add_argument("--select-by", choices=["spearman", "p_at_k"], default="p_at_k",
-                    help="validation metric recorded as selection_value, used to rank configurations (epochs stay on val loss)")
+    ap.add_argument("--select-by", choices=sorted(SELECT_BY), default="p_at_k",
+                    help="validation metric recorded as selection_value, used to rank configurations (epochs stay on "
+                         "val loss); best_try = precision at k against the best try, the same for every target")
     ap.add_argument("--train-instances", type=int, default=None, help="train on all states of N instances (nested)")
     ap.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     ap.add_argument("--loss", choices=sorted(LOSSES), default="mse")
@@ -139,7 +142,7 @@ def fit(model: nn.Module, train_b, val_b, val_states: list[State], args: argpars
     Returns (validation metrics, validation predictions, loss-curve rows)."""
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     loss_fn = LOSSES[args.loss]
-    metric_key = "spearman" if args.select_by == "spearman" else "precision_at_k"
+    metric_key = SELECT_BY[args.select_by]
     best_val, best_epoch, best_state = float("inf"), -1, None
     rows = []
     t_train = time.time()

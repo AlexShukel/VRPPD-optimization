@@ -85,6 +85,8 @@ def load_states(path: str, limit: int | None = None, target: str = "mean") -> li
                                      "(file predates this field; relabel it)")
                 tgt = np.array([np.nan if s is None else s for s in d[field]], dtype=float)
             z, mask = zscore(tgt)
+            if "in_best" not in d:
+                raise ValueError(f"{path}: label line has no 'in_best' field (the orders of the state's best try)")
             routes = order_ids = None
             if "routes" in d and "order_ids" in d:
                 routes = route_indices(d["routes"], d["order_ids"])

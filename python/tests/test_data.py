@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pytest
 
@@ -24,6 +26,16 @@ def test_target_top_reads_top_share(write_labels):
     assert top[0].mask.sum() == 11 and not top[0].mask[0]
     valid = top[0].z[top[0].mask]
     assert abs(valid.mean()) < 1e-9 and abs(valid.std() - 1) < 1e-9
+
+
+def test_missing_in_best_raises(tmp_path, write_labels):
+    path = write_labels("x.jsonl", 1)
+    with open(path) as f:
+        d = json.loads(f.readline())
+    del d["in_best"]
+    (tmp_path / "old.jsonl").write_text(json.dumps(d) + "\n")
+    with pytest.raises(ValueError, match="in_best"):
+        load_states(str(tmp_path / "old.jsonl"))
 
 
 def test_target_top_missing_field_raises(write_labels):
