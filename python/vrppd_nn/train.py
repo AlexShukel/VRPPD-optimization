@@ -16,6 +16,8 @@ import argparse
 import json
 import os
 import random
+import resource
+import sys
 import time
 from typing import Callable
 
@@ -28,7 +30,13 @@ from vrppd_nn.fileio import write_atomic, write_json_atomic
 from vrppd_nn.metrics import evaluate_predictions
 from vrppd_nn.model import B0, save_json
 
-torch.set_num_threads(4)
+torch.set_num_threads(4)  # default for importers; train and train_v1 take --threads
+
+
+def peak_rss_mb() -> float:
+    """Peak resident memory of this process in MB (ru_maxrss: bytes on macOS, kilobytes on Linux)."""
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return rss / (1024 * 1024) if sys.platform == "darwin" else rss / 1024
 
 
 def set_seed(seed: int) -> None:
@@ -126,6 +134,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--patience", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int, default=None, help="use only the first N states (smoke tests)")
+    ap.add_argument("--threads", type=int, default=4, help="torch CPU threads of this process")
 
 
 def load_split_states(args: argparse.Namespace) -> tuple[list[State], list[State]]:
@@ -189,6 +198,7 @@ def write_outputs(out: str, args: argparse.Namespace, met: dict, rows: list[tupl
         json.dumps({"instance": s.instance, "cell": s.cell, "iteration": s.iteration, "z": s.z.tolist(),
                     "mask": s.mask.tolist(), "pred": p.tolist(), "k": s.k}) + "\n"
         for s, p in zip(val_states, preds)))
+    met.update({"threads": torch.get_num_threads(), "peak_rss_mb": peak_rss_mb()})
     write_json_atomic(os.path.join(out, "metrics.json"), met, indent=2)
 
 
@@ -199,6 +209,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--depth", type=int, default=2)
     args = ap.parse_args(argv)
 
+    torch.set_num_threads(args.threads)
     set_seed(args.seed)
     os.makedirs(args.out, exist_ok=True)
     t0 = time.time()

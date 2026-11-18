@@ -391,13 +391,14 @@ def training_summary(root: str, done: set[str] | None = None) -> pd.DataFrame:
                     "loss": c.get("loss"), "target": c.get("target"), "width": c.get("width"), "depth": c.get("depth"),
                     "d": c.get("d"), "n_att": c.get("n_att"), "dropout": c.get("dropout"),
                     "weight_decay": c.get("weight_decay"), "train_instances": c.get("train_instances"),
-                    "seed": c.get("seed"), "train_jobs": jobs}
+                    "seed": c.get("seed"), "train_jobs": jobs, "threads": m.get("threads"),
+                    "peak_rss_mb": m.get("peak_rss_mb")}
         rows.extend(fam_rows.values())
         seed_rows = [fam_rows[s] for s in best.get("seeds", []) if s in fam_rows]
         if seed_rows:
             sdf = pd.DataFrame(seed_rows)
             num = ["params", "spearman", "p_at_k", "p_at_k_best_try", "selection_value", "best_epoch", "epochs_run",
-                   "train_seconds"]
+                   "train_seconds", "peak_rss_mb"]
             name = os.path.basename(best["best"])
             for stat, values in (("seeds mean", sdf[num].mean()), ("seeds sd", sdf[num].std())):
                 rows.append({"family": family, "group": stat, "name": f"{name} ({len(sdf)} seeds)", **values.to_dict()})

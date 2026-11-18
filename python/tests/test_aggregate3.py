@@ -56,7 +56,8 @@ def write_b0_model(root, sub, name, *, width=64, depth=2, loss="mse", target="me
                                                  "best_epoch": 3, "epochs_run": 5, "best_val_loss": 0.9,
                                                  "train_seconds": 12.0, "n_params": 4801, "p_at_k_best_try": p_at_k,
                                                  "selection_value": p_at_k, "select_by": select_by,
-                                                 "n_train_states": 100, "n_val_states": 20})
+                                                 "n_train_states": 100, "n_val_states": 20, "threads": 4,
+                                                 "peak_rss_mb": 512.0})
     write_json(os.path.join(d, "weights.json"), {"layers": []})
     with open(os.path.join(d, "loss_curve.csv"), "w") as f:
         f.write("epoch,train_loss,val_loss,val_spearman,val_p_at_k\n1,1.0,1.1,0.1,0.2\n2,0.9,1.0,0.2,0.3\n")
@@ -175,6 +176,7 @@ def test_partial_results_aggregate(tmp_path):
     training = pd.read_csv(os.path.join(root, "training_summary.csv"))
     assert {"spearman", "p_at_k", "p_at_k_best_try"} <= set(training.columns)
     assert set(training.loc[training.group == "grid", "train_jobs"]) == {6}  # from the b0 manifest
+    assert set(training.loc[training.group == "grid", "peak_rss_mb"]) == {512.0}
     assert training.loc[training.is_best == True, "name"].tolist() == ["w64_d2_rank_top_s0"]  # noqa: E712
     summary = pd.read_csv(os.path.join(root, "summary.csv"))
     assert set(summary["operator"]) == set(CLASSICAL + NEURAL)

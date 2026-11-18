@@ -87,3 +87,30 @@ def test_select_by_best_try_records_its_value(tmp_path, write_labels):
     assert met["select_by"] == "best_try"
     assert met["selection_value"] == met["p_at_k_best_try"]
     assert 0.0 <= met["p_at_k_best_try"] <= 1.0
+
+
+def test_peak_rss_mb_converts_platform_units(monkeypatch):
+    class Usage:
+        ru_maxrss = 0
+
+    usage = Usage()
+    monkeypatch.setattr(train.resource, "getrusage", lambda who: usage)
+    usage.ru_maxrss = 3 * 1024 * 1024  # macOS reports bytes
+    monkeypatch.setattr(train.sys, "platform", "darwin")
+    assert train.peak_rss_mb() == 3.0
+    usage.ru_maxrss = 3 * 1024  # Linux reports kilobytes
+    monkeypatch.setattr(train.sys, "platform", "linux")
+    assert train.peak_rss_mb() == 3.0
+
+
+def test_metrics_record_threads_and_peak_rss(tmp_path, write_labels):
+    import torch
+    try:
+        out = run(tmp_path, write_labels, "--threads", "1")
+        assert torch.get_num_threads() == 1
+    finally:
+        torch.set_num_threads(4)
+    with open(out / "metrics.json") as f:
+        met = json.load(f)
+    assert met["threads"] == 1
+    assert 10 < met["peak_rss_mb"] < 100_000

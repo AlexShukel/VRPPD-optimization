@@ -39,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--init", default=None, help="start from these V1 weights (weights.json)")
     args = ap.parse_args(argv)
 
+    torch.set_num_threads(args.threads)
     set_seed(args.seed)
     os.makedirs(args.out, exist_ok=True)
     t0 = time.time()
