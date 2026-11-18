@@ -170,7 +170,8 @@ EOF
 check_timed_setup() { # reference-file run-dir...
   "$PY" - "$HOST_NAME" "$TIMED_THREADS" "$CPU_LIST" "$@" << 'EOF' || die "the wall-time files above do not match this setup (host $HOST_NAME, threads $TIMED_THREADS, cpus $CPU_LIST): rerun the class's references here (delete $1 and its batch directory under batches/, and the listed run directories), then restart"
 import glob, json, os, sys
-want = (sys.argv[1], int(sys.argv[2]), sys.argv[3])
+# the binaries record the thread count they used: clamped to 1..20
+want = (sys.argv[1], max(1, min(int(sys.argv[2]), 20)), sys.argv[3])
 ref, dirs = sys.argv[4], sys.argv[5:]
 if not os.path.exists(ref):
     sys.exit(f"  {ref}: missing (a class's references must exist before its wall-time runs)")
@@ -210,13 +211,22 @@ run_ref() { # out cell runs instances objective
 }
 
 op_args() { # operator -> OP_ARGS (neural operators take weights and tau from selection.json)
+  local key operator=neural weights tau
   case $1 in
-    random | worst | related | adaptive) OP_ARGS=(--operator "$1") ;;
-    b0 | v1) OP_ARGS=(--operator neural --weights "$ROOT/$(sel "models.$1.weights")" --tau "$(sel "models.$1.tau")") ;;
-    v2) OP_ARGS=(--operator neural --weights "$ROOT/$(sel v2.weights)" --tau "$(sel v2.tau)") ;;
-    adaptive_n) OP_ARGS=(--operator adaptive_n --weights "$ROOT/$(sel best_model.weights)" --tau "$(sel best_model.tau)") ;;
+    random | worst | related | adaptive)
+      OP_ARGS=(--operator "$1")
+      return ;;
+    b0 | v1) key="models.$1" ;;
+    v2) key=v2 ;;
+    adaptive_n) key=best_model operator=adaptive_n ;;
     *) die "unknown operator $1" ;;
   esac
+  weights=$(sel "$key.weights")
+  tau=$(sel "$key.tau")
+  if [[ -z $weights || -z $tau || ! -f $ROOT/$weights ]]; then
+    die "selection.json gives operator $1 no usable weights or tau ($key: weights '$weights', tau '$tau')"
+  fi
+  OP_ARGS=(--operator "$operator" --weights "$ROOT/$weights" --tau "$tau")
 }
 
 train_model() { # module out train-args...; models are ranked by precision at k against the best try,
