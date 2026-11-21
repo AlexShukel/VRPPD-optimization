@@ -27,7 +27,7 @@ Working notes for the final report. Numbers come from `summary.md`, `training_su
 
 - Every model is best at tau = 1.0, the largest value of the grid, and the mean objective falls steadily as tau grows. The best tau may lie beyond the grid; the grid was not extended.
 - Mean objective at tau = 1: V1 7933.4, B0 7946.0, V2 runs 8389.9 (c) to 8610.7 (d). Best model: V1. Best V2 run: (c), one sample per state.
-- V2 best validation reward: a 0.0279 (start V1, S = 4), b 0.0163 (from scratch), c 0.0251 (S = 1), d 0.0234 (S = 8), e 0.0242 (no entropy term). The run with the best reward (a) is not the best in the search (c).
+- V2 best validation reward: a 0.0279 (start V1, S = 4), b 0.0163 (from scratch), c 0.0251 (S = 1), d 0.0234 (S = 8), e 0.0242 (no entropy term). The run with the best reward (a) is not the best in the search (c). Run (b), from scratch, has the lowest reward but is second in the search. The spread between V2 runs (up to 221 km) is about half the gap to V1 (456 km or more).
 
 ## Main comparison (test, 20 instances per class, 10 repeats; gap to CEA %)
 
@@ -40,11 +40,12 @@ Working notes for the final report. Numbers come from `summary.md`, `training_su
 - random 0.54 / 1.42 / -0.14 (58 037 it/s); adaptive 0.52 / 1.20 / -0.63 (54 035)
 - B0 1.16 / 2.48 / 0.91 (7 614); V1 1.65 / 3.68 / 2.98 (338); V2 2.50 / 6.84 / 8.93 (2 033); adaptive with neural rule 1.34 / 2.56 / 0.84 (1 221)
 - Every neural variant is significantly worse than random and than adaptive in every class under the time budget. V1 does about 170 times fewer iterations than random on 20_50.
-- V2 runs about 6 to 7 times more iterations per second than V1 with the same architecture (10_10: 9 918 against 1 424). Cause to be checked in the code before it is stated in the report.
+- V2 runs about 6 to 7 times more iterations per second than V1 with the same architecture (10_10: 9 918 against 1 424). V1 is the slow one: weight decay shrank many of its attention weights to subnormal float values (1 878 in the selected model; none in models trained without weight decay, none in V2), and V1 with random weights ran at about 2 000 it/s on 20_50 in `machine.txt`, the same as V2. That subnormal arithmetic is the cause is inferred, not tested: zeroing these weights and timing again on the x86 host was not done.
+- V2 improves the current solution in fewer iterations than V1 (7.4 % against 13.9 % on 20_50 at 5 000 it.). Why was not measured.
 
 ## Destroy size (5 000 it.)
 
-- A larger share of removed orders helps every operator: on 20_50 random goes from 8.61 (k = 3) to 2.49 (k = 18), adaptive from 6.78 to 1.63, V1 from 8.27 to 2.23. The order of the operators does not change with k; V1 stays between random and adaptive or next to random.
+- A larger share of removed orders helps every operator: on 20_50 random goes from 8.61 (k = 3) to 2.49 (k = 18), adaptive from 6.78 to 1.63, V1 from 8.27 to 2.23. Adaptive is best at every k on 10_20 and 20_50; V1 and random swap places by up to 0.44 points. No tests were run for the sweep. The best k is the largest one tried for every operator (edge of the grid, like tau).
 - On 10_10 and 10_20 several shares give the same k because k = max(3, round(share x orders)).
 
 ## Large classes (10 instances, 5 repeats, V1 trained only on 10_20 and 20_50)
@@ -61,7 +62,7 @@ Working notes for the final report. Numbers come from `summary.md`, `training_su
 ## RQ answers (draft)
 
 - RQ1: no. At equal iterations the learned operators match random removal on the training classes; at equal time they are clearly worse because scoring is slow. The only positive result is V1 at equal iterations on the two largest classes.
-- RQ2: the richer input (V1) does not improve the search over B0; REINFORCE (V2) makes it much worse within a 3 h budget; the number of removed orders matters more than the operator, and the network does not change which k is best.
+- RQ2: the richer input (V1) does not improve the search over B0; REINFORCE (V2) makes it much worse within a 3 h budget; the number of removed orders matters more than the operator, and the best k is the largest tried for every operator.
 - RQ3: at equal iterations V1 transfers to larger instances and is not worse on other objectives than random; at equal time it does not pay off anywhere.
 
 ## Checks
