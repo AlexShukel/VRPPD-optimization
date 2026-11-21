@@ -5,6 +5,7 @@
  - Spearman / precision@k of the single feature `route_saving` (= the "worst" rule)
 
 Usage: python -m vrppd_nn.label_stats --labels train.jsonl --out stats.json [--md stats.md]
+Both outputs are written as *.tmp and renamed.
 """
 from __future__ import annotations
 
@@ -15,16 +16,17 @@ import numpy as np
 from scipy.stats import pearsonr, spearmanr
 
 from vrppd_nn.data import FEATURE_NAMES, load_states
+from vrppd_nn.fileio import write_atomic, write_json_atomic
 from vrppd_nn.metrics import evaluate_predictions
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--labels", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--md", default=None)
     ap.add_argument("--thresholds", default="0.5,1,2,5", help="percent of objective")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     states = load_states(args.labels)
     thresholds = [float(t) for t in args.thresholds.split(",")]
 
@@ -83,8 +85,7 @@ def main() -> None:
         "random_ranking": {"spearman": rand["spearman"], "precision_at_k": rand["precision_at_k"]},
         "per_cell": per_cell,
     }
-    with open(args.out, "w") as f:
-        json.dump(out, f, indent=2)
+    write_json_atomic(args.out, out, indent=2)
     if args.md:
         lines = [f"Label statistics for `{args.labels}`: {out['n_states']} states, {out['n_rows']} order rows, M = {out['M']}.", ""]
         lines.append("| cell | states | try-improvement std (% of obj) | best − median try (% of obj) | best try (% of obj) | median try (% of obj) | share of tries with gain > 0 |")
@@ -100,8 +101,7 @@ def main() -> None:
         for name in FEATURE_NAMES:
             lines.append(f"| {name} | {corr[name]['pearson']:.3f} | {corr[name]['spearman']:.3f} | {baselines[name]['spearman']:.3f} | {baselines[name]['precision_at_k']:.3f} |")
         lines.append(f"| (random order) | – | – | {rand['spearman']:.3f} | {rand['precision_at_k']:.3f} |")
-        with open(args.md, "w") as f:
-            f.write("\n".join(lines) + "\n")
+        write_atomic(args.md, "\n".join(lines) + "\n")
     print(json.dumps({k: v for k, v in out.items() if k not in ("feature_correlation_with_z", "single_feature_ranking", "per_cell")}))
 
 

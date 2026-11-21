@@ -1,0 +1,19 @@
+{
+  "batch": "ksweep",
+  "host": "pingwin",
+  "cpu_model": "Intel(R) Core(TM) i5-14600KF",
+  "taskset": "0,2,4,6,8,10",
+  "threads": {
+    "iterations": 18,
+    "timed": 6
+  },
+  "commit": "9996050",
+  "start": "2026-11-20T10:43:24",
+  "end": "2026-11-20T11:18:37",
+  "runs": 6000,
+  "smoke": false,
+  "train_jobs": {
+    "b0": 4,
+    "v1": 3
+  }
+}

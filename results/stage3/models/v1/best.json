@@ -1,0 +1,8 @@
+{
+  "best": "grid/d64_a2_do0.1_wd1e-4_s0",
+  "seeds": [
+    "grid/d64_a2_do0.1_wd1e-4_s0",
+    "seeds/d64_a2_do0.1_wd1e-4_s1",
+    "seeds/d64_a2_do0.1_wd1e-4_s2"
+  ]
+}

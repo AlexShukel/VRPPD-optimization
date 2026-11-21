@@ -28,6 +28,17 @@ COLORS = {"random": "#2a78d6", "worst": "#eb6834", "related": "#1baf7a", "adapti
 CELL_ORDER = ["10_10", "10_20", "20_50", "30_100", "50_200", "100_500"]
 
 
+def run_row(d: dict, budget: str, operator: str, cell: str) -> dict:
+    """The summary fields of one LNS run file (without the curve)."""
+    return {
+        "budget": budget, "operator": operator, "cell": cell, "instance": d["instance"], "seed": d["seed"],
+        "initial": d["initial"], "best": d["best"], "iterations": d["iterations"], "elapsed_ms": d["elapsed_ms"],
+        "accepted": d["accepted"], "improved_current": d["improved_current"], "new_best_count": d["new_best_count"],
+        "best_iteration": d["best_iteration"], "best_elapsed_ms": d["best_elapsed_ms"], "k": d["k"],
+        "destroy_ms": d["destroy_ms"], "repair_ms": d["repair_ms"], "valid": d["valid"],
+    }
+
+
 def load_runs(root: str) -> pd.DataFrame:
     rows = []
     curves = {}
@@ -38,15 +49,16 @@ def load_runs(root: str) -> pd.DataFrame:
             d = json.load(f)
         key = (budget, operator, cell, d["instance"], d["seed"])
         curves[key] = d["curve"]
-        rows.append({
-            "budget": budget, "operator": operator, "cell": cell, "instance": d["instance"], "seed": d["seed"],
-            "initial": d["initial"], "best": d["best"], "iterations": d["iterations"], "elapsed_ms": d["elapsed_ms"],
-            "accepted": d["accepted"], "improved_current": d["improved_current"], "new_best_count": d["new_best_count"],
-            "best_iteration": d["best_iteration"], "best_elapsed_ms": d["best_elapsed_ms"], "k": d["k"],
-            "destroy_ms": d["destroy_ms"], "repair_ms": d["repair_ms"], "valid": d["valid"],
-        })
+        rows.append(run_row(d, budget, operator, cell))
     df = pd.DataFrame(rows)
     return df, curves
+
+
+def reference_row(r: dict) -> dict:
+    """The fields of one CEA reference record."""
+    return {"cell": r["cell"], "instance": r["instance"], "cea_best": r["best"],
+            "cea_mean": float(np.mean(r["runs"])), "cea_runs": len(r["runs"]),
+            "cea_mean_runtime_s": float(np.mean(r["runtimes_ms"])) / 1000.0}
 
 
 def load_reference(root: str) -> pd.DataFrame:
@@ -54,9 +66,7 @@ def load_reference(root: str) -> pd.DataFrame:
     for path in glob.glob(os.path.join(root, "reference", "cea_ref_*.json")):
         with open(path) as f:
             for r in json.load(f):
-                rows.append({"cell": r["cell"], "instance": r["instance"], "cea_best": r["best"],
-                             "cea_mean": float(np.mean(r["runs"])), "cea_runs": len(r["runs"]),
-                             "cea_mean_runtime_s": float(np.mean(r["runtimes_ms"])) / 1000.0})
+                rows.append(reference_row(r))
     return pd.DataFrame(rows)
 
 

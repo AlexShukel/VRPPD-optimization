@@ -25,3 +25,25 @@ The whole Stage 2 experiment is `scripts/stage2/run_all.sh` (idempotent, each
 stage skipped if its output exists; `STAGE2_TINY=1` runs a smoke config). It
 writes to `results/stage2/` and appends the result tables to
 `results/stage2/REPORT-NOTES.md`.
+
+## Stage 3: reproduce
+
+Prerequisites: Rust (stable), Python 3.12 with `uv`, bash ≥ 5.1 for the scripts
+(macOS: Homebrew bash), and on the compute host a CUDA build of torch. The test instances (`problem-gen/problems/`) and the generator pools
+(`problem-gen/data/`) are not in git; copy them next to the code first.
+
+One host file per machine, `scripts/stage3/hosts/<name>.env`, sets the CPU list and
+thread counts. From the Mac, `scripts/stage3/remote.sh bootstrap` prepares the host
+(clone, venv, build, tests) and
+`remote.sh run stage3 'scripts/stage3/run_all.sh >> results/stage3/pipeline.log 2>&1'`
+starts the experiment there (`remote.sh status` shows that log). The experiment is a queue of resumable batches
+(`run_all.sh --list`); restarting it skips finished work, `remote.sh pull` copies
+finished batches back and `remote.sh watch` restarts the queue after a reboot. On a
+single machine: `STAGE3_HOST=<name> scripts/stage3/run_all.sh`.
+`SMOKE=1 scripts/stage3/run_all.sh` runs a tiny configuration in a few minutes.
+
+Outputs land in `results/stage3/`: trained models (`models/`), the choice of model
+and temperature made on validation instances (`selection/selection.json`), CEA
+references (`reference/`), batch manifests (`batches/`) and raw runs (`lns/`, not in
+git). `python -m vrppd_nn.aggregate3 --root results/stage3` writes `summary.md`,
+`summary.csv`, `stats.csv`, `training_summary.csv`, `tables/` and `figures/`.

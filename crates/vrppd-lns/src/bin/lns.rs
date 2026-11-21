@@ -2,27 +2,31 @@
 //! with `--repeats` seeds, writing a JSON result and a CSV search curve per run.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::Parser;
 use rayon::prelude::*;
-use serde::Serialize;
-use vrppd_lns::io::{cell_name, init_threads, load_instances, resolve_cell_dir};
-use vrppd_lns::{Context, LnsConfig, build_operator, initial_solution, run_lns};
+use serde::{Deserialize, Serialize};
+use vrppd_core::Objective;
+use vrppd_lns::io::{cell_name, file_hash, init_threads, load_instances, resolve_cell_dir};
+use vrppd_lns::{
+  Context, LnsConfig, build_operator, distance_name, initial_solution, objective_name,
+  parse_objective, run_lns,
+};
 
 #[derive(Parser, Debug)]
-#[command(
-  name = "lns",
-  about = "Large Neighbourhood Search runs for the VRPPD (distance objective)."
-)]
+#[command(name = "lns", about = "Large Neighbourhood Search runs for the VRPPD.")]
 struct Args {
   /// Thesis cell name (e.g. 10_20) or a directory of instance JSON files.
   #[arg(long)]
   cell: String,
-  /// Destroy operator: random | worst | related | adaptive | neural.
+  /// Destroy operator: random | worst | related | adaptive | neural | adaptive_n.
   #[arg(long, default_value = "random")]
   operator: String,
+  /// Objective to minimise: distance | price | empty.
+  #[arg(long, default_value = "distance", value_parser = parse_objective)]
+  objective: Objective,
   /// Iteration budget (0 = none).
   #[arg(long, default_value_t = 5000)]
   iters: u64,
@@ -32,9 +36,12 @@ struct Args {
   /// Base seed; run r on instance i uses seed = seed + 1000*i + r.
   #[arg(long, default_value_t = 1)]
   seed: u64,
-  /// Destroy size (0 = 15 % of orders, min 3).
+  /// Destroy size (0 = use --k-frac; wins over --k-frac when set).
   #[arg(long, default_value_t = 0)]
   k: usize,
+  /// Destroy size as a fraction of the orders (min 3; default 0.15).
+  #[arg(long)]
+  k_frac: Option<f64>,
   #[arg(long, default_value_t = 1)]
   repeats: usize,
   /// Output directory (files: <out>/<instance>_s<seed>.json and .curve.csv).
@@ -58,12 +65,19 @@ struct Args {
   /// Only the first N instances of the cell.
   #[arg(long)]
   max_instances: Option<usize>,
-  /// Worker threads (hard-capped at 6).
+  /// Worker threads (hard-capped at 20).
   #[arg(long, default_value_t = 6)]
   threads: usize,
   /// Re-run even if the result file already exists (default: skip existing).
   #[arg(long, default_value_t = false)]
   force: bool,
+  /// Machine name written into every run file as `host` (pipeline bookkeeping).
+  #[arg(long, default_value = "")]
+  host_tag: String,
+  /// CPU list the process is pinned to (e.g. the taskset list), written into
+  /// every run file as `cpu_list`.
+  #[arg(long, default_value = "")]
+  cpu_list: String,
 }
 
 #[derive(Serialize)]
@@ -75,13 +89,43 @@ struct RunFile<'a> {
   budget_iters: Option<u64>,
   budget_secs: Option<f64>,
   tau: f64,
+  host: &'a str,
+  /// Worker threads of the run's process (runs execute in parallel, one per thread).
+  threads: usize,
+  cpu_list: &'a str,
+  /// `--weights` as given, and the first 16 hex digits of the file's SHA-256
+  /// (both empty without `--weights`).
+  weights: &'a str,
+  weights_hash: &'a str,
   #[serde(flatten)]
   result: &'a vrppd_lns::LnsResult,
 }
 
+/// What a run file that is skipped must agree with.
+#[derive(Deserialize)]
+struct ExistingRun {
+  /// Files from before the field existed are distance runs.
+  #[serde(default = "distance_name")]
+  objective: String,
+  /// Empty without weights and in files from before the field existed.
+  #[serde(default)]
+  weights_hash: String,
+}
+
+/// The recorded fields of an existing result file (None if there is no
+/// readable file).
+fn existing_run(path: &Path) -> Option<ExistingRun> {
+  let text = fs::read_to_string(path).ok()?;
+  serde_json::from_str(&text).ok()
+}
+
+fn shown_hash(hash: &str) -> &str {
+  if hash.is_empty() { "none" } else { hash }
+}
+
 fn main() {
   let args = Args::parse();
-  let threads = init_threads(args.threads, 6);
+  let threads = init_threads(args.threads, 20);
   let dir = resolve_cell_dir(&args.cell);
   let cell = cell_name(&dir);
   let instances = load_instances(&dir, args.max_instances).unwrap_or_else(|e| {
@@ -100,6 +144,17 @@ fn main() {
     eprintln!("{e}");
     std::process::exit(2)
   });
+  let weights = args
+    .weights
+    .as_deref()
+    .map_or_else(String::new, |p| p.to_string_lossy().into_owned());
+  let weights_hash = match args.weights.as_deref() {
+    Some(p) => file_hash(p).unwrap_or_else(|e| {
+      eprintln!("{e}");
+      std::process::exit(2)
+    }),
+    None => String::new(),
+  };
 
   let cfg_base = LnsConfig {
     max_iters: if args.iters > 0 {
@@ -113,6 +168,7 @@ fn main() {
       None
     },
     k: if args.k > 0 { Some(args.k) } else { None },
+    k_frac: args.k_frac,
     log_every: args.log_every,
     log_every_ms: args.log_every_ms,
     ..Default::default()
@@ -126,14 +182,41 @@ fn main() {
     .flat_map(|i| (0..args.repeats).map(move |r| (i, r)))
     .collect();
   eprintln!(
-    "lns: cell={cell} operator={} instances={} repeats={} jobs={} threads={threads} iters={:?} secs={:?}",
+    "lns: cell={cell} operator={} objective={} instances={} repeats={} jobs={} threads={threads} iters={:?} secs={:?}",
     args.operator,
+    objective_name(args.objective),
     instances.len(),
     args.repeats,
     jobs.len(),
     cfg_base.max_iters,
     cfg_base.max_secs
   );
+  if !args.force {
+    for &(i, r) in &jobs {
+      let seed = args.seed + 1000 * i as u64 + r as u64;
+      let path = args.out.join(format!("{}_s{}.json", instances[i].id, seed));
+      if let Some(found) = existing_run(&path) {
+        if found.objective != objective_name(args.objective) {
+          eprintln!(
+            "{} holds a '{}' run but --objective is '{}'; use another --out or --force",
+            path.display(),
+            found.objective,
+            objective_name(args.objective)
+          );
+          std::process::exit(1);
+        }
+        if found.weights_hash != weights_hash {
+          eprintln!(
+            "{} was written with weights hash {} but --weights '{weights}' has hash {}; use another --out or --force",
+            path.display(),
+            shown_hash(&found.weights_hash),
+            shown_hash(&weights_hash)
+          );
+          std::process::exit(1);
+        }
+      }
+    }
+  }
   let started = Instant::now();
   let done: usize = jobs
     .par_iter()
@@ -145,7 +228,7 @@ fn main() {
       if !args.force && json_path.exists() {
         return 0;
       }
-      let ctx = Context::new(&inst.problem);
+      let ctx = Context::with_objective(&inst.problem, args.objective);
       let mut op = build_operator(
         &args.operator,
         args.weights.as_deref(),
@@ -175,6 +258,11 @@ fn main() {
         budget_iters: cfg.max_iters,
         budget_secs: cfg.max_secs,
         tau: args.tau,
+        host: &args.host_tag,
+        threads,
+        cpu_list: &args.cpu_list,
+        weights: &weights,
+        weights_hash: &weights_hash,
         result: &res,
       };
       let tmp = args.out.join(format!("{stem}.json.tmp"));

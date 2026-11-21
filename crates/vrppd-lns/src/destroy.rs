@@ -5,8 +5,7 @@ use rand::seq::SliceRandom;
 use rand_xoshiro::Xoshiro256StarStar;
 use vrppd_core::WorkingSolution;
 
-use crate::features::compute_features;
-use crate::mlp::Mlp;
+use crate::scorer::{Scorer, load_scorer};
 use crate::solution::{Context, placements, removal_saving};
 
 /// What happened to the solution produced after this operator's destroy + repair.
@@ -157,6 +156,7 @@ impl DestroyOperator for RelatedDestroy {
 /// Adaptive selection (Ropke & Pisinger 2006): roulette over sub-operators with
 /// weights updated at the end of every segment from the scores collected.
 pub struct AdaptiveDestroy {
+  name: String,
   pub ops: Vec<Box<dyn DestroyOperator>>,
   pub weights: Vec<f64>,
   scores: Vec<f64>,
@@ -172,6 +172,7 @@ impl AdaptiveDestroy {
   pub fn new(ops: Vec<Box<dyn DestroyOperator>>) -> Self {
     let n = ops.len();
     Self {
+      name: "adaptive".to_string(),
       ops,
       weights: vec![1.0; n],
       scores: vec![0.0; n],
@@ -182,6 +183,12 @@ impl AdaptiveDestroy {
       iter_in_segment: 0,
       last: 0,
     }
+  }
+
+  /// Same selection and feedback mechanism under another operator name.
+  pub fn named(mut self, name: &str) -> Self {
+    self.name = name.to_string();
+    self
   }
 
   pub fn classical() -> Self {
@@ -195,7 +202,7 @@ impl AdaptiveDestroy {
 
 impl DestroyOperator for AdaptiveDestroy {
   fn name(&self) -> &str {
-    "adaptive"
+    &self.name
   }
 
   fn select(
@@ -249,19 +256,19 @@ impl DestroyOperator for AdaptiveDestroy {
   }
 }
 
-/// Neural destroy: score every order with the MLP on the eight B0 features and
+/// Neural destroy: score every order with a [`Scorer`] (B0: MLP on the eight features) and
 /// remove the top-k (tau = 0) or sample without replacement from
 /// softmax(score / tau) (tau > 0).
 pub struct NeuralDestroy {
-  pub mlp: Mlp,
+  pub scorer: Box<dyn Scorer>,
   pub tau: f64,
   pub last_scores: Vec<f64>,
 }
 
 impl NeuralDestroy {
-  pub fn new(mlp: Mlp, tau: f64) -> Self {
+  pub fn new(scorer: Box<dyn Scorer>, tau: f64) -> Self {
     Self {
-      mlp,
+      scorer,
       tau,
       last_scores: Vec::new(),
     }
@@ -328,9 +335,7 @@ impl DestroyOperator for NeuralDestroy {
     k: usize,
     rng: &mut Xoshiro256StarStar,
   ) -> Vec<usize> {
-    let n = ctx.n_orders();
-    let feats = compute_features(ctx, sol);
-    self.last_scores = self.mlp.score_all(&feats, n);
+    self.last_scores = self.scorer.score(ctx, sol);
     let candidates = routed_orders(ctx, sol);
     Self::pick(&self.last_scores, &candidates, k, self.tau, rng)
   }
@@ -354,13 +359,32 @@ pub fn build_operator(
     ])),
     "neural" => {
       let path = weights.ok_or("neural operator needs --weights")?;
-      Box::new(NeuralDestroy::new(Mlp::load(path)?, tau))
+      Box::new(NeuralDestroy::new(load_scorer(path)?, tau))
+    }
+    "adaptive_n" => {
+      let path = weights.ok_or("adaptive_n operator needs --weights")?;
+      Box::new(
+        AdaptiveDestroy::new(vec![
+          Box::new(RandomDestroy),
+          Box::new(WorstDestroy { p: worst_p }),
+          Box::new(RelatedDestroy),
+          Box::new(NeuralDestroy::new(load_scorer(path)?, tau)),
+        ])
+        .named("adaptive_n"),
+      )
     }
     other => return Err(format!("unknown operator {other}")),
   })
 }
 
-pub const OPERATOR_NAMES: [&str; 5] = ["random", "worst", "related", "adaptive", "neural"];
+pub const OPERATOR_NAMES: [&str; 6] = [
+  "random",
+  "worst",
+  "related",
+  "adaptive",
+  "neural",
+  "adaptive_n",
+];
 
 #[cfg(test)]
 mod tests {
@@ -387,5 +411,109 @@ mod tests {
       s.dedup();
       assert_eq!(s.len(), 3);
     }
+  }
+
+  fn fixture_weights() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/mlp_fixture_weights.json")
+  }
+
+  fn load_problem(cell: &str, idx: usize) -> vrppd_core::Problem {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+      .join("../../problem-gen/problems")
+      .join(cell);
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+      .unwrap()
+      .filter_map(|e| e.ok())
+      .map(|e| e.path())
+      .collect();
+    files.sort();
+    serde_json::from_str(&std::fs::read_to_string(&files[idx]).unwrap()).unwrap()
+  }
+
+  #[test]
+  fn adaptive_n_uses_all_four_rules() {
+    use crate::lns::{LnsConfig, initial_solution, run_lns};
+    use std::collections::BTreeSet;
+    let problem = load_problem("10_20", 0);
+    let ctx = Context::new(&problem);
+    let mut op = build_operator("adaptive_n", Some(&fixture_weights()), 1.0, 3.0).unwrap();
+    assert_eq!(op.name(), "adaptive_n");
+    let cfg = LnsConfig {
+      max_iters: Some(2000),
+      seed: 3,
+      ..Default::default()
+    };
+    let mut seen = BTreeSet::new();
+    {
+      let op_ref: &mut dyn DestroyOperator = op.as_mut();
+      // Wrap the operator to record which rule ran each iteration.
+      struct Spy<'a>(&'a mut dyn DestroyOperator, &'a mut BTreeSet<String>);
+      impl DestroyOperator for Spy<'_> {
+        fn name(&self) -> &str {
+          self.0.name()
+        }
+        fn select(
+          &mut self,
+          ctx: &Context,
+          sol: &WorkingSolution,
+          k: usize,
+          rng: &mut Xoshiro256StarStar,
+        ) -> Vec<usize> {
+          let out = self.0.select(ctx, sol, k, rng);
+          self.1.insert(self.0.last_used().to_string());
+          out
+        }
+        fn feedback(&mut self, outcome: Outcome) {
+          self.0.feedback(outcome)
+        }
+      }
+      let mut spy = Spy(op_ref, &mut seen);
+      run_lns(&ctx, initial_solution(&ctx, 3), &mut spy, &cfg, None);
+    }
+    let expect: BTreeSet<String> = ["random", "worst", "related", "neural"]
+      .iter()
+      .map(|s| s.to_string())
+      .collect();
+    assert_eq!(seen, expect);
+  }
+
+  #[test]
+  fn adaptive_n_needs_weights() {
+    assert!(build_operator("adaptive_n", None, 1.0, 3.0).is_err());
+  }
+
+  #[test]
+  fn neural_scores_unchanged_by_cache() {
+    use crate::features::compute_features;
+    use crate::lns::{LnsConfig, initial_solution, run_lns};
+    use crate::mlp::Mlp;
+    // Stage 2 path: full feature matrix, then the MLP on all rows. The cached
+    // scorer must agree bit for bit at every step of a search.
+    let problem = load_problem("10_20", 0);
+    let ctx = Context::new(&problem);
+    let mlp = Mlp::load(&fixture_weights()).unwrap();
+    let mut neural = NeuralDestroy::new(load_scorer(&fixture_weights()).unwrap(), 0.0);
+    let mut rng = Xoshiro256StarStar::seed_from_u64(9);
+    let mut checked = 0;
+    let mut hook = |_: u64, sol: &WorkingSolution, _: f64| {
+      neural.select(&ctx, sol, 3, &mut rng);
+      let expected = mlp.score_all(&compute_features(&ctx, sol), ctx.n_orders());
+      assert_eq!(neural.last_scores, expected);
+      checked += 1;
+    };
+    let mut op = RandomDestroy;
+    let cfg = LnsConfig {
+      max_iters: Some(200),
+      seed: 4,
+      ..Default::default()
+    };
+    run_lns(
+      &ctx,
+      initial_solution(&ctx, 4),
+      &mut op,
+      &cfg,
+      Some(&mut hook),
+    );
+    assert_eq!(checked, 200);
   }
 }
