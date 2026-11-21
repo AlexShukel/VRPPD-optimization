@@ -1,0 +1,9 @@
+{
+  "operator": "v1",
+  "probe_iters": 100,
+  "iters_per_s": 13.94350672019242,
+  "full_iters": 5000,
+  "projected_s": 358.5898512,
+  "limit_s": 600.0,
+  "iterations": 5000
+}

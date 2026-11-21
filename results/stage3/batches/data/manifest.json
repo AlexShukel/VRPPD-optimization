@@ -1,0 +1,15 @@
+{
+  "batch": "data",
+  "host": "pingwin",
+  "cpu_model": "Intel(R) Core(TM) i5-14600KF",
+  "taskset": "0,2,4,6,8,10",
+  "threads": {
+    "iterations": 18,
+    "timed": 6
+  },
+  "commit": "9a4227e",
+  "start": "2026-11-18T11:47:30",
+  "end": "2026-11-18T11:50:31",
+  "runs": 3300,
+  "smoke": false
+}

@@ -1,0 +1,107 @@
+{
+  "n_states": 5700,
+  "n_rows": 171000,
+  "M": 1000,
+  "mean_rel_std_pct": 0.8252358325014222,
+  "median_rel_std_pct": 0.7204706328923626,
+  "mean_best_minus_median_pct": 1.9387835592119247,
+  "mean_best_try_pct": 1.9712081059140438,
+  "mean_median_try_pct": 0.03242454670211901,
+  "mean_frac_positive_tries": 0.19812508771929827,
+  "frac_states_best_beats_median_by": {
+    "0.5%": 0.6426315789473684,
+    "1.0%": 0.5512280701754386,
+    "2.0%": 0.3956140350877193,
+    "5.0%": 0.09578947368421052
+  },
+  "feature_correlation_with_z": {
+    "route_saving": {
+      "pearson": -0.01671002716190965,
+      "spearman": -0.080803324831006
+    },
+    "start_to_pickup": {
+      "pearson": -0.057242991460653335,
+      "spearman": -0.042610467367243866
+    },
+    "pickup_to_delivery": {
+      "pearson": -0.20916398317296064,
+      "spearman": -0.20831976468186664
+    },
+    "load_factor": {
+      "pearson": 0.039852892823558625,
+      "spearman": 0.021040094150629227
+    },
+    "price_km": {
+      "pearson": -6.329223854121538e-05,
+      "spearman": -0.0005124130329123435
+    },
+    "orders_on_route": {
+      "pearson": -0.07554229911296578,
+      "spearman": -0.04802389253696425
+    },
+    "nearest_other": {
+      "pearson": -0.025786602423482987,
+      "spearman": -0.04675466605595388
+    },
+    "relative_position": {
+      "pearson": -0.02065725209633319,
+      "spearman": -0.02556446261793075
+    }
+  },
+  "single_feature_ranking": {
+    "route_saving": {
+      "spearman": -0.0967699028566949,
+      "precision_at_k": 0.1662207602339181
+    },
+    "start_to_pickup": {
+      "spearman": -0.07835649283360002,
+      "precision_at_k": 0.13327485380116957
+    },
+    "pickup_to_delivery": {
+      "spearman": -0.2148456452488812,
+      "precision_at_k": 0.10945175438596491
+    },
+    "load_factor": {
+      "spearman": 0.01684077267764847,
+      "precision_at_k": 0.1498830409356725
+    },
+    "price_km": {
+      "spearman": 0.003087799080919411,
+      "precision_at_k": 0.16407894736842105
+    },
+    "orders_on_route": {
+      "spearman": -0.10102884829326804,
+      "precision_at_k": 0.13833333333333334
+    },
+    "nearest_other": {
+      "spearman": -0.07228476673620511,
+      "precision_at_k": 0.14384502923976608
+    },
+    "relative_position": {
+      "spearman": -0.0328140949391498,
+      "precision_at_k": 0.14801900584795322
+    }
+  },
+  "random_ranking": {
+    "spearman": 0.0027963544879746707,
+    "precision_at_k": 0.1520175438596491
+  },
+  "per_cell": {
+    "10_20": {
+      "n_states": 3800,
+      "mean_rel_std_pct": 0.7028595673895569,
+      "mean_best_minus_median_pct": 1.7063708794238683,
+      "mean_best_pct": 1.71878754084679,
+      "mean_median_pct": 0.01241666142292149,
+      "mean_frac_positive_tries": 0.11896868421052632
+    },
+    "20_50": {
+      "n_states": 1900,
+      "mean_rel_std_pct": 1.0699883627251527,
+      "mean_best_minus_median_pct": 2.4036089187880365,
+      "mean_best_pct": 2.4760492360485507,
+      "mean_median_pct": 0.07244031726051404,
+      "mean_frac_positive_tries": 0.35643789473684206
+    }
+  }
+}

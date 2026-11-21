@@ -1,0 +1,13 @@
+{
+  "best": "grid/w128_d2_rank_mean_s0",
+  "seeds": [
+    "grid/w128_d2_rank_mean_s0",
+    "seeds/w128_d2_rank_mean_s1",
+    "seeds/w128_d2_rank_mean_s2"
+  ],
+  "trainsize": {
+    "500": "trainsize/w128_d2_rank_mean_n500_s0",
+    "1000": "trainsize/w128_d2_rank_mean_n1000_s0",
+    "3000": "grid/w128_d2_rank_mean_s0"
+  }
+}

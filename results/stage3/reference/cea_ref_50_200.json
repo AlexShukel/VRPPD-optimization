@@ -1,0 +1,372 @@
+[
+  {
+    "cell": "50_200",
+    "instance": "0",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      29171.327196890714,
+      29270.971503193236,
+      30291.72984868613
+    ],
+    "runtimes_ms": [
+      66663.06205,
+      69099.68613,
+      64717.99317999999
+    ],
+    "generations": [
+      10,
+      9,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 29171.327196890714,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "1",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      30436.21998633176,
+      29393.22697248095,
+      29896.485420357483
+    ],
+    "runtimes_ms": [
+      64786.702151,
+      69033.414221,
+      66031.100233
+    ],
+    "generations": [
+      9,
+      9,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 29393.22697248095,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "2",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      33255.66556305771,
+      33672.8174378021,
+      33624.91943198372
+    ],
+    "runtimes_ms": [
+      64740.28397700001,
+      67669.638237,
+      65689.557449
+    ],
+    "generations": [
+      8,
+      8,
+      7
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 33255.66556305771,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "3",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      28499.629704569685,
+      27948.666890072807,
+      27299.202604060396
+    ],
+    "runtimes_ms": [
+      64110.140207000004,
+      67474.146792,
+      63830.419126
+    ],
+    "generations": [
+      9,
+      9,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 27299.202604060396,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "4",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      32865.74139816349,
+      34199.76619098518,
+      34813.18922811665
+    ],
+    "runtimes_ms": [
+      67323.521926,
+      62777.252218,
+      68923.539219
+    ],
+    "generations": [
+      9,
+      8,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 32865.74139816349,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "5",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      31719.91766076937,
+      32055.524890567543,
+      31333.345844837557
+    ],
+    "runtimes_ms": [
+      64643.587683000005,
+      61532.119807999996,
+      67107.88421399999
+    ],
+    "generations": [
+      9,
+      8,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 31333.345844837557,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "6",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      33604.20637554749,
+      33647.89733906139,
+      34177.80565848109
+    ],
+    "runtimes_ms": [
+      63251.474321,
+      68851.487545,
+      68255.196073
+    ],
+    "generations": [
+      9,
+      9,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 33604.20637554749,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "7",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      32944.93382786467,
+      33348.55647507439,
+      33367.540216836824
+    ],
+    "runtimes_ms": [
+      67450.329065,
+      65225.162392,
+      61381.28068
+    ],
+    "generations": [
+      9,
+      8,
+      7
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 32944.93382786467,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "8",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      29193.489117593483,
+      29889.93072314214,
+      29411.750602804812
+    ],
+    "runtimes_ms": [
+      62780.822636000004,
+      61821.751280000004,
+      65599.39653499999
+    ],
+    "generations": [
+      9,
+      8,
+      8
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 29193.489117593483,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "50_200",
+    "instance": "9",
+    "objective": "distance",
+    "n_orders": 200,
+    "n_vehicles": 50,
+    "runs": [
+      31276.043774941918,
+      31698.04797174121,
+      32070.279818937714
+    ],
+    "runtimes_ms": [
+      64486.153896,
+      67633.559981,
+      62099.587778
+    ],
+    "generations": [
+      8,
+      8,
+      7
+    ],
+    "exit_reasons": [
+      "WallTimeCap",
+      "WallTimeCap",
+      "WallTimeCap"
+    ],
+    "best": 31276.043774941918,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  }
+]

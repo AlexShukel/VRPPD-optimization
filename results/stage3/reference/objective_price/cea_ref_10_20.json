@@ -1,0 +1,742 @@
+[
+  {
+    "cell": "10_20",
+    "instance": "0",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6667.820884959218,
+      6667.820884959218,
+      6667.820884959218
+    ],
+    "runtimes_ms": [
+      12363.123684,
+      12422.755196,
+      11667.660415
+    ],
+    "generations": [
+      512,
+      511,
+      507
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6667.820884959218,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "1",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6253.589847785697,
+      6253.589847785697,
+      6617.547008739748
+    ],
+    "runtimes_ms": [
+      10371.611503,
+      10183.431453000001,
+      7239.358711999999
+    ],
+    "generations": [
+      516,
+      504,
+      518
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6253.589847785697,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "2",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      7318.771086387912,
+      7318.771086387912,
+      7318.771086387912
+    ],
+    "runtimes_ms": [
+      10864.069334,
+      10969.078856,
+      10856.232073
+    ],
+    "generations": [
+      507,
+      511,
+      507
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 7318.771086387912,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "3",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6751.719507401695,
+      6751.719507401695,
+      6751.719507401695
+    ],
+    "runtimes_ms": [
+      11870.415253000001,
+      11872.435712999999,
+      16712.42901
+    ],
+    "generations": [
+      526,
+      524,
+      737
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6751.719507401695,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "4",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      5494.10790225636,
+      5494.10790225636,
+      5494.10790225636
+    ],
+    "runtimes_ms": [
+      11845.514366,
+      11866.193208,
+      11789.289718
+    ],
+    "generations": [
+      505,
+      507,
+      506
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 5494.10790225636,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "5",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      5651.479045462389,
+      5436.95933282658,
+      5436.95933282658
+    ],
+    "runtimes_ms": [
+      12974.818445,
+      11672.258138,
+      11426.87056
+    ],
+    "generations": [
+      515,
+      518,
+      509
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 5436.95933282658,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "6",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      8482.496022641213,
+      8485.062786378308,
+      8485.062786378308
+    ],
+    "runtimes_ms": [
+      11339.379305,
+      11909.618262,
+      11668.796156999999
+    ],
+    "generations": [
+      525,
+      525,
+      522
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 8482.496022641213,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "7",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      9993.145590440978,
+      9993.145590440978,
+      9993.145590440978
+    ],
+    "runtimes_ms": [
+      11223.256153,
+      11237.640610999999,
+      11168.936744999999
+    ],
+    "generations": [
+      506,
+      511,
+      509
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 9993.145590440978,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "8",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6501.381539791602,
+      6501.381539791602,
+      6501.381539791602
+    ],
+    "runtimes_ms": [
+      12504.455594,
+      12517.879556,
+      13459.972332
+    ],
+    "generations": [
+      520,
+      520,
+      561
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6501.381539791602,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "9",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      7503.62792825724,
+      7503.62792825724,
+      7503.62792825724
+    ],
+    "runtimes_ms": [
+      11306.417335999999,
+      11297.09794,
+      11451.453209000001
+    ],
+    "generations": [
+      510,
+      507,
+      515
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 7503.62792825724,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000020,
+      7000023,
+      7000022
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "10",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6690.6894422554915,
+      6752.47317145254,
+      6752.47317145254
+    ],
+    "runtimes_ms": [
+      14450.787215,
+      11438.977151,
+      10939.097883
+    ],
+    "generations": [
+      659,
+      547,
+      530
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6690.6894422554915,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "11",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6432.234222990243,
+      6054.788268027336,
+      6054.788268027336
+    ],
+    "runtimes_ms": [
+      8178.785632,
+      19334.830460999998,
+      11682.14113
+    ],
+    "generations": [
+      506,
+      858,
+      507
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6054.788268027336,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "12",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      9521.326859701776,
+      9521.326859701776,
+      9521.326859701776
+    ],
+    "runtimes_ms": [
+      12530.791288,
+      12273.300878,
+      12263.219468000001
+    ],
+    "generations": [
+      521,
+      516,
+      513
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 9521.326859701776,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "13",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      5800.2035155109925,
+      5800.2035155109925,
+      5800.2035155109925
+    ],
+    "runtimes_ms": [
+      12084.73899,
+      11657.676491,
+      11351.222165
+    ],
+    "generations": [
+      535,
+      518,
+      502
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 5800.2035155109925,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "14",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6384.086429557261,
+      6384.086429557261,
+      6079.265887933122
+    ],
+    "runtimes_ms": [
+      12769.542446,
+      11586.897775000001,
+      10350.056814
+    ],
+    "generations": [
+      622,
+      554,
+      511
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6079.265887933122,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "15",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6149.2282195060125,
+      5992.075863190673,
+      5992.075863190673
+    ],
+    "runtimes_ms": [
+      10348.502926,
+      11474.453722,
+      11844.540369
+    ],
+    "generations": [
+      509,
+      527,
+      547
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 5992.075863190673,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "16",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      8373.302582647788,
+      8373.302582647788,
+      8373.302582647788
+    ],
+    "runtimes_ms": [
+      10155.202067999999,
+      10569.329309,
+      10099.88506
+    ],
+    "generations": [
+      507,
+      529,
+      507
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 8373.302582647788,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "17",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6794.5696642587045,
+      6794.5696642587045,
+      6794.5696642587045
+    ],
+    "runtimes_ms": [
+      6705.382466999999,
+      6657.137368,
+      6676.127861
+    ],
+    "generations": [
+      505,
+      502,
+      504
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6794.5696642587045,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "18",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      7536.362152686978,
+      7536.362152686978,
+      7536.362152686978
+    ],
+    "runtimes_ms": [
+      11536.101444,
+      11371.522074999999,
+      11248.730839
+    ],
+    "generations": [
+      520,
+      513,
+      507
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 7536.362152686978,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  },
+  {
+    "cell": "10_20",
+    "instance": "19",
+    "objective": "price",
+    "n_orders": 20,
+    "n_vehicles": 10,
+    "runs": [
+      6445.338257401818,
+      6445.338257401818,
+      6445.338257401818
+    ],
+    "runtimes_ms": [
+      10576.360781,
+      10830.782743,
+      10586.434802
+    ],
+    "generations": [
+      511,
+      524,
+      516
+    ],
+    "exit_reasons": [
+      "Converged",
+      "Converged",
+      "Converged"
+    ],
+    "best": 6445.338257401818,
+    "host": "pingwin",
+    "threads": 6,
+    "cpu_list": "0,2,4,6,8,10",
+    "rayon_threads": 6,
+    "seeds": [
+      7000023,
+      7000020,
+      7000021
+    ]
+  }
+]

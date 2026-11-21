@@ -1,0 +1,19 @@
+{
+  "batch": "time-10_10",
+  "host": "pingwin",
+  "cpu_model": "Intel(R) Core(TM) i5-14600KF",
+  "taskset": "0,2,4,6,8,10",
+  "threads": {
+    "iterations": 18,
+    "timed": 6
+  },
+  "commit": "9996050",
+  "start": "2026-11-19T21:07:19",
+  "end": "2026-11-20T01:39:21",
+  "runs": 1600,
+  "smoke": false,
+  "train_jobs": {
+    "b0": 4,
+    "v1": 3
+  }
+}
