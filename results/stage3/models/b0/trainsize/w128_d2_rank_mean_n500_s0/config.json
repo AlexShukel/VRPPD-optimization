@@ -1,0 +1,21 @@
+{
+  "train": "results/stage3/labels/train.jsonl",
+  "val": "results/stage3/labels/val.jsonl",
+  "out": "results/stage3/models/b0/trainsize/w128_d2_rank_mean_n500_s0",
+  "target": "mean",
+  "select_by": "best_try",
+  "train_instances": 500,
+  "device": "auto",
+  "loss": "rank",
+  "dropout": 0.1,
+  "weight_decay": 0.0001,
+  "lr": 0.001,
+  "batch_states": 8,
+  "epochs": 100,
+  "patience": 10,
+  "seed": 0,
+  "limit": null,
+  "threads": 4,
+  "width": 128,
+  "depth": 2
+}
